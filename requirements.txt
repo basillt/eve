@@ -1,0 +1,10 @@
+# Install PyTorch FIRST with CUDA from https://pytorch.org/get-started/locally/
+# (pick: Stable / Windows / Pip / Python / your CUDA version), then:
+transformers>=5.0
+accelerate
+safetensors
+numpy
+matplotlib
+tokenizers
+fastapi
+uvicorn

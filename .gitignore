@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+# your data stays on your computer
+data/
+store/
+*.gguf
+*.part
+config.json
+# test models are made by tests/make_tiny_model.py
+tests/tiny-*/
+tests/store/
+tools/out/
+web/_brain_test.html

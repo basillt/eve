@@ -1,0 +1,14 @@
+model: tests/tiny-granitemoe   (4 MoE layers × 16 experts, top-4)
+personal prompts: 60  (train 70%, 20 random splits)   generic prompts: 60
+
+target hit |          personal core |           generic core |   oracle | saving vs generic
+-------------------------------------------------------------------------------------------
+       80% |      9/16 (56%) 0.00GB |      9/16 (56%) 0.00GB |      56% | 1.00× fewer experts
+       90% |     12/16 (75%) 0.00GB |     12/16 (75%) 0.00GB |      75% | 1.00× fewer experts
+       95% |     14/16 (88%) 0.00GB |     14/16 (88%) 0.00GB |      88% | 1.00× fewer experts
+       99% |    16/16 (100%) 0.00GB |    16/16 (100%) 0.00GB |     100% | 1.00× fewer experts
+
+full model at 4.5 bits/weight: 0.00 GB (non-expert part always in RAM: 0.00 GB)
+
+with 20% of experts in RAM: personal core hits 42.6%, generic core hits 42.6%  (gap -0.0 points)
+verdict: WEAK: personal and generic cores are close — personalization adds little here.

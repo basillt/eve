@@ -1,0 +1,99 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/web/vendor/three.module.min.js"}}</script>
+<style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#05060d}
+body{font-family:"Noto Kufi Arabic","Segoe UI","Noto Sans Arabic",Tahoma,system-ui,sans-serif;color:#fff}
+#stage{position:absolute;inset:0;background:radial-gradient(60% 40% at 50% 42%,#241256 0%,#0b0b22 55%,#05060d 100%)}
+#stage::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(25,227,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(25,227,255,.045) 1px,transparent 1px);background-size:54px 54px}
+#stage::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.br{position:absolute;width:70px;height:70px;border:0 solid}
+.br.a{top:44px;left:44px;border-top-width:6px;border-left-width:6px;border-color:#19e3ff}
+.br.b{top:44px;right:44px;border-top-width:6px;border-right-width:6px;border-color:#ff2bd6}
+.br.c{bottom:44px;left:44px;border-bottom-width:6px;border-left-width:6px;border-color:#ff2bd6}
+.br.d{bottom:44px;right:44px;border-bottom-width:6px;border-right-width:6px;border-color:#19e3ff}
+#b{position:absolute;left:0;top:330px;width:1080px;height:1150px;z-index:2}
+.layer{position:absolute;left:0;right:0;text-align:center;z-index:3;opacity:0}
+#counter{top:120px}
+#counter small{display:block;font-size:40px;color:#8ea3c7;letter-spacing:.02em}
+#counter b{display:block;font-size:150px;line-height:1.05;font-weight:800;color:#19e3ff;text-shadow:0 0 40px rgba(25,227,255,.6);font-variant-numeric:tabular-nums}
+#counter span{font-size:44px;color:#cfe0ff}
+.cap{top:1480px;font-size:66px;font-weight:700;line-height:1.35;padding:0 90px;text-shadow:0 0 30px rgba(255,43,214,.45)}
+#cap3{top:150px}
+#chat{top:1500px;padding:0 90px;display:flex;flex-direction:column;gap:28px;align-items:stretch}
+.bub{font-size:46px;line-height:1.45;padding:22px 34px;max-width:78%;text-align:start}
+.u{align-self:flex-start;background:linear-gradient(135deg,rgba(255,43,214,.32),rgba(255,43,214,.12));border:2px solid rgba(255,43,214,.6);
+  clip-path:polygon(18px 0,100% 0,100% 100%,0 100%,0 18px)}
+.e{align-self:flex-end;background:rgba(16,22,44,.85);border:2px solid #1f2b4d;border-inline-start:5px solid #19e3ff;min-height:66px}
+[dir=ltr] .u{align-self:flex-end}[dir=ltr] .e{align-self:flex-start}
+.cursor{display:inline-block;width:.45em;height:1em;background:#19e3ff;vertical-align:-.12em;margin-inline-start:6px}
+#logo{top:1430px}
+#logo h1{margin:0;font-size:200px;line-height:1;font-weight:800;letter-spacing:.01em;text-shadow:0 0 50px rgba(25,227,255,.85),0 0 120px rgba(25,227,255,.35)}
+#logo p{margin:18px 0 0;font-size:58px;font-weight:700}
+#logo small{display:block;margin-top:14px;font-size:44px;color:#19e3ff}
+#black{position:absolute;inset:0;background:#000;z-index:9}
+</style></head>
+<body>
+<div id="stage"><div class="br a"></div><div class="br b"></div><div class="br c"></div><div class="br d"></div></div>
+<canvas id="b"></canvas>
+<div class="layer" id="counter"><small id="c-label"></small><b id="c-num">1</b><span id="c-unit"></span></div>
+<div class="layer cap" id="cap1"></div>
+<div class="layer cap" id="cap2"></div>
+<div class="layer cap" id="cap3"></div>
+<div class="layer" id="chat"><div class="bub u" id="q"></div><div class="bub e" id="a"></div></div>
+<div class="layer" id="logo"><h1>Eve</h1><p id="l1"></p><small id="l2"></small></div>
+<div id="black"></div>
+<script type="module">
+import { createBrain } from "/web/brain.js";
+const lang = new URLSearchParams(location.search).get("lang") || "ar";
+const T = {
+  ar: {label: "عمر الدماغ", unit1: "يوم", unit: "يوم", cap1: "هاد دماغ Eve بأول يوم", cap2: "كل ليلة بتتعلّم عنك… وبيكبر",
+       cap3: "وبتفكر قدامك", q: "إيمتى التسليم الأول؟", a: "يوم 15 كانون الأول، حسب ملف خطة المشروع.",
+       l1: "AI بيشتغل على جهازك", l2: "بدون إنترنت. ببلاش."},
+  en: {label: "Brain age", unit1: "day", unit: "days", cap1: "Eve's brain on day one", cap2: "Every night it learns about you, and grows",
+       cap3: "And you can watch it think", q: "When is the first deadline?", a: "December 15, according to your project plan.",
+       l1: "AI that runs on your computer", l2: "Offline. Free."},
+}[lang];
+document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+const $ = (id) => document.getElementById(id);
+for (const k of ["cap1", "cap2", "cap3", "q", "l1", "l2"]) $(k).textContent = T[k];
+$("c-label").textContent = T.label;
+
+const brain = createBrain($("b"), {autoplay: false});
+brain.setGrowth(0.06, true);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const win = (t, a, b, f = .35) => clamp(Math.min((t - a) / f, (b - t) / f));   // fade in at a, out at b
+let mood = "", talking = false;
+window.F = (f) => {
+  const t = f / 30;
+  // growth: a sparse outline, then 60 days in 4 seconds
+  const g = t < 4 ? 0.06 + 0.18 * ease(t / 3.4) : 0.24 + 0.76 * ease((t - 4) / 3.7);
+  brain.setGrowth(g, true, true);
+  const want = t < 8 ? "neutral" : t < 9.6 ? "thinking" : t < 12 ? "neutral" : "happy";
+  if (want !== mood) { mood = want; brain.setMood(want); }
+  const tk = t >= 9.6 && t < 11.8;
+  if (tk !== talking) { talking = tk; brain.setTalking(tk); }
+  if (tk && f % 3 === 0) brain.pulse();
+  brain.advance(1 / 30);
+
+  const days = t < 4 ? 1 : Math.round(1 + 59 * ease((t - 4) / 3.7));
+  $("c-num").textContent = days; $("c-unit").textContent = days === 1 ? T.unit1 : T.unit;
+  $("counter").style.opacity = win(t, 0.4, 8.0);
+  $("cap1").style.opacity = win(t, 0.6, 3.9);
+  $("cap2").style.opacity = win(t, 4.1, 7.9);
+  $("cap3").style.opacity = win(t, 8.3, 12.0);
+  const chat = win(t, 8.2, 12.0); $("chat").style.opacity = chat;
+  $("q").style.transform = `translateY(${(1 - clamp((t - 8.2) / .4)) * 30}px)`;
+  const n = Math.max(0, Math.floor((t - 9.6) * 30));
+  const shown = [...T.a].slice(0, n).join("");
+  $("a").innerHTML = ""; $("a").append(shown);
+  if (t >= 9.0 && n < [...T.a].length) { const c = document.createElement("span"); c.className = "cursor"; $("a").append(c); }
+  $("a").style.visibility = t >= 9.0 ? "visible" : "hidden";
+  $("logo").style.opacity = clamp((t - 12.2) / .5);
+  $("logo").style.transform = `scale(${1.06 - 0.06 * ease((t - 12.2) / .8)})`;
+  $("black").style.opacity = 1 - clamp(t / .5);
+};
+window.ready = true;
+</script>
+</body></html>

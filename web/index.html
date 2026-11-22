@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eve</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2306070f%27/%3E%3Cpath d=%27M23 11H11v10h12M11 16h9%27 fill=%27none%27 stroke=%27%2319e3ff%27 stroke-width=%273%27/%3E%3Ccircle cx=%2725%27 cy=%277%27 r=%272.5%27 fill=%27%23ff2bd6%27/%3E%3C/svg%3E">
+<script type="importmap">{"imports":{"three":"/web/vendor/three.module.min.js"}}</script>
+<style>
+:root{
+  --ink:#1c2340; --ink-soft:#56607f; --line:#d5dcea;
+  --paper:#f4f7fc; --card:#ffffff;
+  --flame:#ffc533; --flame-deep:#f59a1b; --glass:#fff1bf;
+  --sea:#11767c; --sea-deep:#0c5a5f;
+  --sky:#a9dcec; --sky-low:#d9f0e6; --night:#1a2552; --night-low:#2c3a78;
+  --bad:#b3261e;
+  --r:14px;
+  font-family:"Noto Kufi Arabic","Segoe UI","Noto Sans Arabic",Tahoma,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-size:16px;line-height:1.7}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--flame-deep);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(300px,38%) 1fr;height:100dvh}
+
+/* ---------- the stage: where the brain lives ---------- */
+.stage{position:relative;overflow:hidden;background:radial-gradient(70% 55% at 50% 42%,#1c1046 0%,#0b0b22 55%,#05060d 100%);
+  border-inline-end:3px solid var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  transition:background 1.2s}
+.stage::before{content:"";position:absolute;inset:0;background:radial-gradient(70% 55% at 50% 42%,#0e0b2e 0%,#04040b 75%);opacity:0;transition:opacity 1.4s}
+.asleep .stage::before{opacity:1}
+.who{position:relative;z-index:2;text-align:center;padding:0 16px 22px;color:#fff}
+.asleep .who{color:#eef1ff}
+.who h1{margin:0;font-size:1.75rem;line-height:1.3}
+.who p{margin:2px 0 0;font-size:.95rem;opacity:.85}
+.status{position:relative;z-index:2;min-height:1.7em;font-size:.95rem;margin-bottom:6px;color:#fff}
+.asleep .status{color:#eef1ff}
+/* ---------- the working side ---------- */
+.side{display:flex;flex-direction:column;min-width:0;min-height:0}
+.top{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--card);flex-wrap:wrap}
+.local{display:inline-flex;align-items:center;gap:6px;background:#e3f3ee;color:var(--sea-deep);border:1.5px solid var(--sea);
+  border-radius:999px;padding:2px 12px;font-size:.85rem;font-weight:600;white-space:nowrap}
+.tabs{display:flex;gap:2px;margin-inline-start:auto;flex-wrap:wrap}
+.tabs button{background:none;border:0;padding:6px 12px;border-radius:10px;color:var(--ink-soft);font-weight:600}
+.tabs button[aria-selected="true"]{background:var(--ink);color:#fff}
+.view{flex:1;min-height:0;overflow:auto;display:none;padding:22px clamp(16px,4vw,44px)}
+.view.on{display:block}
+#v-chat.on{display:flex;flex-direction:column;padding:0}
+.view h2{font-size:1.3rem;margin:0 0 4px}
+.view .lead{color:var(--ink-soft);margin:0 0 18px;max-width:60ch}
+
+.log{flex:1;overflow:auto;padding:22px clamp(16px,4vw,44px);display:flex;flex-direction:column;gap:14px}
+.empty{margin:auto;text-align:center;color:var(--ink-soft);max-width:40ch}
+.msg{max-width:min(68ch,88%);display:flex;flex-direction:column;gap:4px}
+.msg .b{padding:10px 16px;border-radius:var(--r);white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.user{align-self:flex-start}
+.msg.user .b{background:var(--sea);color:#fff;border-end-start-radius:4px}
+.msg.bot{align-self:flex-end}
+.msg.bot .b{background:var(--card);border:1.5px solid var(--ink);border-end-end-radius:4px}
+.acts{display:flex;gap:6px;align-items:center;font-size:.85rem;flex-wrap:wrap}
+.acts button{background:none;border:1px solid var(--line);border-radius:999px;padding:1px 12px;color:var(--ink-soft)}
+.acts button:hover{border-color:var(--ink);color:var(--ink)}
+.acts .saved{color:var(--sea-deep);font-weight:600}
+.fix{display:flex;flex-direction:column;gap:6px;width:100%}
+.fix textarea{min-height:76px}
+.composer{display:flex;gap:10px;padding:12px clamp(16px,4vw,44px) 16px;border-top:1px solid var(--line);background:var(--card)}
+textarea,input[type=text]{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff;resize:vertical}
+.composer textarea{resize:none;height:50px;max-height:160px}
+.btn{background:var(--ink);color:#fff;border:0;border-radius:12px;padding:8px 18px;font-weight:700;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.flame{background:var(--flame);color:var(--ink);border:2px solid var(--ink)}
+.btn.ghost{background:none;color:var(--ink);border:1.5px solid var(--ink)}
+.btn.danger{background:none;color:var(--bad);border:1.5px solid var(--bad)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin-bottom:16px;max-width:760px}
+.panel h3{margin:0 0 8px;font-size:1.05rem}
+.bar{display:flex;height:30px;border:2px solid var(--ink);border-radius:9px;overflow:hidden;background:#e7ebf5}
+.bar span{display:block;height:100%}
+.bar .k{background:var(--ink)} .bar .h{background:var(--flame)} .bar .c{background:#ffe59c}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.9rem;margin-top:8px;color:var(--ink-soft)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:6px;vertical-align:-1px;border:1px solid var(--ink)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0}
+.facts div{margin:0}
+.facts dt{font-size:.85rem;color:var(--ink-soft)}
+.facts dd{margin:0;font-size:1.35rem;font-weight:700;direction:ltr;text-align:end}
+.note{font-size:.9rem;color:var(--ink-soft);margin:8px 0 0}
+ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+ul.plain li{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}
+ul.plain li span{overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;max-width:760px}
+.pcard{border:2px solid var(--line);border-radius:var(--r);padding:14px;background:var(--card);text-align:start}
+.pcard[aria-pressed="true"]{border-color:var(--ink);box-shadow:4px 4px 0 var(--flame)}
+.pcard b{display:block;font-size:1.1rem}
+.pcard small{color:var(--ink-soft)}
+.tag{display:inline-block;font-size:.78rem;border:1px solid var(--sea);color:var(--sea-deep);border-radius:999px;padding:0 9px;margin-top:6px}
+.err{color:var(--bad)}
+
+/* morning card */
+.morning{position:absolute;z-index:5;inset-inline:14px;top:14px;background:#fffdf3;border:2.5px solid var(--ink);border-radius:18px;
+  padding:16px 18px;box-shadow:6px 6px 0 var(--flame);display:none;max-height:calc(100% - 28px);overflow:auto;color:var(--ink)}
+.morning.on{display:block;animation:rise .5s cubic-bezier(.3,1.5,.5,1)}
+@keyframes rise{from{transform:translateY(-20px) scale(.96);opacity:0}}
+.morning h2{margin:0 0 6px;font-size:1.25rem}
+.morning ul{margin:0 0 12px;padding-inline-start:20px}
+
+/* the brain: the default face of the assistant */
+#brain3d{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:1;cursor:grab}
+#brain3d:active{cursor:grabbing}
+.isbrain #brain3d{display:block}
+.isbrain .stage{background:radial-gradient(120% 90% at 50% 42%,#24316b 0%,#141c44 55%,#0d1331 100%)}
+.isbrain .stage::before{background:radial-gradient(120% 90% at 50% 42%,#1a1f4a 0%,#0b0f29 70%)}
+.isbrain .who,.isbrain .status{color:#fff;transition:none;text-shadow:0 1px 4px rgba(5,8,25,.7)}
+.isbrain .who p{color:#b9c2e6}
+.langbtn{margin-inline-start:auto;background:none;border:1.5px solid var(--line);border-radius:999px;padding:2px 12px;color:var(--ink-soft);font:inherit;font-size:.85rem;cursor:pointer}
+.langbtn:hover{border-color:var(--ink);color:var(--ink)}
+
+/* character designer */
+.editor{max-width:760px}
+.editor .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.editor label.f{display:flex;flex-direction:column;gap:4px;font-size:.92rem;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:2px 12px;font-size:.9rem}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.ed-actions{position:sticky;bottom:-22px;background:var(--card);padding:12px 0;margin-top:14px;border-top:1px solid var(--line)}
+@media (max-width:600px){.editor .grid{grid-template-columns:1fr}}
+
+@media (max-width:820px){
+  .app{grid-template-columns:1fr;grid-template-rows:34dvh 1fr}
+  .stage{border-inline-end:0;border-bottom:3px solid var(--ink);flex-direction:row;justify-content:center;gap:8px;padding:8px 12px}
+  .who{padding:0;text-align:start}.who h1{font-size:1.35rem}
+  .status{position:absolute;bottom:6px;inset-inline-start:12px;margin:0;font-size:.85rem}
+  .typing .app{grid-template-rows:18dvh 1fr}
+  .typing .who p{display:none}
+  .isbrain .stage{flex-direction:column;justify-content:flex-end;align-items:flex-start}
+  .isbrain .who{position:relative;z-index:2;text-align:start;padding:0 4px 4px}
+  .top{padding:8px 12px}.tabs{margin-inline-start:0;width:100%;overflow-x:auto;flex-wrap:nowrap}
+}
+@media (prefers-reduced-motion:reduce){
+  .morning.on{animation:none!important;transition:none!important}
+}
+
+/* ================= cyberpunk theme (night city HUD) =================
+   VOICE: a calm, modern HUD; neon is used for meaning, not decoration
+   COLOUR: void #06070f, glass panels, cyan = the assistant, magenta = you, yellow = action
+   SHAPE: cut corners, 1px neon edges, faint grid and scanlines on the stage */
+:root{
+  --void:#06070f; --deep:#0a0d1c; --glass:rgba(16,22,44,.72); --glass-hi:rgba(24,32,62,.85);
+  --ink:#e6f1ff; --ink-soft:#8ea3c7; --line:#1f2b4d;
+  --cyan:#19e3ff; --cyan-dim:rgba(25,227,255,.35); --mag:#ff2bd6; --mag-dim:rgba(255,43,214,.35); --volt:#f6ff4a;
+  --bad:#ff4d6d; --cut:10px;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+}
+body{background:var(--void);color:var(--ink);
+  background-image:linear-gradient(rgba(25,227,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(25,227,255,.035) 1px,transparent 1px),
+    radial-gradient(60% 50% at 100% 0%,rgba(255,43,214,.10),transparent 70%),radial-gradient(50% 40% at 0% 100%,rgba(25,227,255,.08),transparent 70%);
+  background-size:32px 32px,32px 32px,auto,auto}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;box-shadow:0 0 0 4px rgba(25,227,255,.18)}
+::selection{background:var(--mag);color:#fff}
+
+/* stage */
+.stage{border-inline-end:1px solid var(--cyan-dim);box-shadow:inset -1px 0 0 rgba(25,227,255,.08)}
+.isbrain .stage{background:radial-gradient(70% 55% at 50% 42%,#1c1046 0%,#0b0b22 55%,#05060d 100%)}
+.isbrain .stage::before{background:radial-gradient(70% 55% at 50% 42%,#0e0b2e 0%,#04040b 75%)}
+.isbrain .stage::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(rgba(255,255,255,.025) 0 1px,transparent 1px 3px),
+    linear-gradient(var(--cyan),var(--cyan)) top 14px left 14px/22px 2px no-repeat,linear-gradient(var(--cyan),var(--cyan)) top 14px left 14px/2px 22px no-repeat,
+    linear-gradient(var(--mag),var(--mag)) top 14px right 14px/22px 2px no-repeat,linear-gradient(var(--mag),var(--mag)) top 14px right 14px/2px 22px no-repeat}
+.isbrain .who h1{color:#fff;text-shadow:0 0 18px rgba(25,227,255,.55)}
+.isbrain .who p{color:var(--ink-soft)}
+.isbrain .status{color:var(--volt);text-shadow:0 0 10px rgba(246,255,74,.45)}
+
+/* top bar and tabs */
+.top{background:rgba(8,11,24,.9);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.local{background:rgba(25,227,255,.08);color:var(--cyan);border:1px solid var(--cyan-dim);border-radius:0;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+#mode{color:var(--ink-soft)}
+.langbtn{border-radius:0;border:1px solid var(--line);color:var(--ink-soft)}
+.langbtn:hover{border-color:var(--mag);color:var(--mag)}
+.tabs button{border-radius:0;color:var(--ink-soft);position:relative}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{background:none;color:var(--cyan);text-shadow:0 0 12px rgba(25,227,255,.6)}
+.tabs button[aria-selected="true"]::after{content:"";position:absolute;inset-inline:10px;bottom:-2px;height:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.view h2{color:#fff;letter-spacing:.01em}
+.view h2::after{content:"";display:block;width:44px;height:2px;margin-top:6px;background:linear-gradient(90deg,var(--cyan),var(--mag))}
+.view .lead,.note{color:var(--ink-soft)}
+
+/* chat */
+.empty{color:var(--ink-soft)}
+.msg .b{border-radius:0}
+.msg.user .b{background:linear-gradient(135deg,rgba(255,43,214,.20),rgba(255,43,214,.08));color:#fff;border:1px solid var(--mag-dim);
+  clip-path:polygon(var(--cut) 0,100% 0,100% 100%,0 100%,0 var(--cut))}
+.msg.bot .b{background:var(--glass);border:1px solid var(--line);border-inline-start:2px solid var(--cyan);color:var(--ink);
+  box-shadow:0 0 24px rgba(25,227,255,.06);clip-path:polygon(0 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%)}
+.acts button{border-radius:0;border:1px solid var(--line);color:var(--ink-soft);background:rgba(10,13,28,.6)}
+.acts button:hover{border-color:var(--cyan);color:var(--cyan)}
+.acts .saved{color:var(--cyan)}
+.composer{background:rgba(8,11,24,.92);border-top:1px solid var(--line)}
+textarea,input[type=text]{background:var(--deep);border:1px solid var(--line);border-radius:0;color:var(--ink)}
+textarea::placeholder,input::placeholder{color:#5d6f94}
+textarea:focus,input[type=text]:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 18px rgba(25,227,255,.25)}
+
+/* buttons */
+.btn{background:var(--cyan);color:#041018;border-radius:0;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:box-shadow .2s,filter .2s}
+.btn:hover:not(:disabled){filter:brightness(1.12);box-shadow:0 0 18px rgba(25,227,255,.5)}
+.btn.flame{background:var(--volt);color:#0b0c05;border:0}
+.btn.flame:hover:not(:disabled){box-shadow:0 0 18px rgba(246,255,74,.5)}
+.btn.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan-dim)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid rgba(255,77,109,.6)}
+.chip{background:var(--deep);border:1px solid var(--line);border-radius:0;color:var(--ink)}
+.chip:hover{border-color:var(--cyan)}
+.chip[aria-pressed="true"]{background:rgba(25,227,255,.14);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 12px rgba(25,227,255,.25)}
+
+/* panels, facts, memory, cards */
+.panel{background:var(--glass);border:1px solid var(--line);border-radius:0;position:relative;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+.panel h3{color:#fff}
+.facts dt{color:var(--ink-soft)}
+.facts dd{font-weight:700;font-variant-numeric:tabular-nums;color:var(--cyan);text-shadow:0 0 10px rgba(25,227,255,.35);font-size:1.15rem}
+ul.plain li{border-bottom:1px solid var(--line)}
+.bar{border:1px solid var(--line);border-radius:0;background:var(--deep)}
+.bar .k{background:#3a4a78} .bar .h{background:var(--cyan)} .bar .c{background:var(--mag)}
+.legend i{border-radius:0;border:0}
+.pcard{background:var(--glass);border:1px solid var(--line);border-radius:0}
+.pcard[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 24px rgba(25,227,255,.18)}
+.pcard small{color:var(--ink-soft)}
+.tag{border-radius:0;border:1px solid var(--mag-dim);color:var(--mag)}
+.err{color:var(--bad)}
+.editor fieldset,.ed-actions{border-color:var(--line)}
+.ed-actions{background:var(--deep)}
+
+/* morning card */
+.morning{background:rgba(10,12,30,.94);color:var(--ink);border:1px solid var(--mag);border-radius:0;
+  box-shadow:0 0 0 1px rgba(255,43,214,.25),0 0 40px rgba(255,43,214,.25);backdrop-filter:blur(10px);
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
+.morning h2{color:#fff;text-shadow:0 0 14px rgba(255,43,214,.6)}
+.morning li::marker{color:var(--mag)}
+
+/* left-to-right: you on the right, the assistant on the left */
+[dir="ltr"] .msg.user{align-self:flex-end}
+[dir="ltr"] .msg.bot{align-self:flex-start}
+
+/* brain age under the name */
+.who .age,.isbrain .who .age{margin:6px 0 0;font-size:.8rem;color:var(--cyan);opacity:.85;letter-spacing:.02em}
+.asleep .who .age{color:#9fb0ff}
+/* files in the chat */
+.attach{background:none;border:1px solid var(--line);color:var(--ink-soft);width:50px;height:50px;display:grid;place-items:center;flex:none;cursor:pointer}
+.attach:hover{border-color:var(--cyan);color:var(--cyan)}
+.attached{display:flex;flex-wrap:wrap;gap:8px;padding:8px clamp(16px,4vw,44px) 0;background:rgba(8,11,24,.92);border-top:1px solid var(--line)}
+.fchip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--cyan-dim);background:rgba(25,227,255,.08);color:var(--ink);padding:3px 4px 3px 10px;font-size:.85rem;max-width:100%}
+.fchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:28ch}
+.fchip button{background:none;border:0;color:var(--ink-soft);font-size:1.1rem;line-height:1;padding:0 6px;cursor:pointer}
+.fchip button:hover{color:var(--bad)}
+.src{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.8rem;color:var(--ink-soft)}
+.src .fchip{padding:1px 8px;font-size:.78rem;border-color:var(--line)}
+.dropping .log,.drop.dropping{outline:2px dashed var(--cyan);outline-offset:-10px;background:rgba(25,227,255,.05)}
+.drop{border-style:dashed;text-align:center;padding:26px 18px}
+#filelist .meta{display:block;color:var(--ink-soft);font-size:.82rem}
+#filelist .row{gap:6px;flex-wrap:nowrap}
+/* mixed Arabic / English text keeps its own direction */
+.fchip span,.src .fchip,#m-list li,.picks span,ul.plain li span,#filelist b{unicode-bidi:plaintext}
+/* sharing the morning card */
+.morning{max-height:calc(100% - 28px);overflow:auto}
+.picks{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.picks label{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:.92rem}
+.picks input{accent-color:var(--mag);margin-top:5px}
+#m-canvas{width:100%;max-width:300px;height:auto;display:block;margin:0 auto 12px;border:1px solid var(--line)}
+
+/* scrollbars */
+*{scrollbar-color:#2a3a66 transparent;scrollbar-width:thin}
+@media (max-width:820px){.stage{border-inline-end:0;border-bottom:1px solid var(--cyan-dim)}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <section class="stage" data-i-aria="stage_aria">
+    <div class="morning" id="morning" role="dialog" aria-labelledby="m-title">
+      <h2 id="m-title" data-i="morning_h"></h2>
+      <ul id="m-list"></ul>
+      <div class="row">
+        <button class="btn flame" id="m-ok" data-i="ok_btn"></button>
+        <button class="btn ghost" id="m-undo" data-i="m_undo"></button>
+        <button class="btn ghost" id="m-share" data-i="m_share"></button>
+      </div>
+      <div id="m-sharebox" hidden>
+        <p class="note" data-i="share_pick"></p>
+        <div class="picks" id="m-pick"></div>
+        <canvas id="m-canvas" width="1080" height="1350" role="img" data-i-aria="share_preview"></canvas>
+        <div class="row">
+          <button class="btn" id="m-save" data-i="share_save"></button>
+          <button class="btn ghost" id="m-native" hidden data-i="share_native"></button>
+          <button class="btn ghost" id="m-back" data-i="cancel"></button>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="brain3d" aria-hidden="true" data-i-title="brain_drag"></canvas>
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="who"><h1 id="p-name">Eve</h1><p id="p-tag"></p><p class="age" id="p-age"></p></div>
+  </section>
+
+  <section class="side">
+    <header class="top">
+      <span class="local" data-i-title="local_title" data-i="local"></span>
+      <span class="note" id="mode" style="margin:0"></span>
+      <button class="langbtn" id="langbtn" type="button" lang="en">English</button>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-v="chat" aria-selected="true" data-i="tab_chat"></button>
+        <button role="tab" data-v="brain" aria-selected="false" data-i="tab_brain"></button>
+        <button role="tab" data-v="memory" aria-selected="false" data-i="tab_memory"></button>
+        <button role="tab" data-v="files" aria-selected="false" data-i="tab_files"></button>
+        <button role="tab" data-v="personas" aria-selected="false" data-i="tab_personas"></button>
+        <button role="tab" data-v="settings" aria-selected="false" data-i="tab_settings"></button>
+      </nav>
+    </header>
+
+    <div class="view on" id="v-chat">
+      <div class="log" id="log"><p class="empty" id="empty" data-i="empty"></p></div>
+      <div class="attached" id="attached" hidden></div>
+      <form class="composer" id="form">
+        <button class="attach" id="attach" type="button" data-i-aria="attach_aria" data-i-title="attach_aria"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M16.5 6.5l-7.8 7.8a2 2 0 002.8 2.8l8.1-8.1a4 4 0 00-5.7-5.7L5.6 11.6a6 6 0 008.5 8.5l6.4-6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <input type="file" id="filepick" hidden multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.htm,.log">
+        <textarea id="input" data-i-ph="input_ph" data-i-aria="input_aria" rows="1"></textarea>
+        <button class="btn" id="send" data-i="send"></button>
+      </form>
+    </div>
+
+    <div class="view" id="v-brain">
+      <h2 data-i="brain_h"></h2>
+      <p class="lead" id="brain-lead"></p>
+      <div class="panel" id="rampanel">
+        <h3 data-i="ram_h"></h3>
+        <div class="bar" id="rambar" role="img"></div>
+        <div class="legend"><span><i style="background:var(--ink)"></i><b data-i="leg_skel" style="font-weight:400"></b></span><span><i style="background:var(--flame)"></i><b data-i="leg_core" style="font-weight:400"></b></span><span><i style="background:#ffe59c"></i><b data-i="leg_cache" style="font-weight:400"></b></span><span><i style="background:#e7ebf5"></i><b data-i="leg_disk" style="font-weight:400"></b></span></div>
+        <p class="note" id="ramtext"></p>
+      </div>
+      <div class="panel"><dl class="facts" id="facts"></dl></div>
+      <div class="panel">
+        <h3 data-i="night_h"></h3>
+        <p class="note" id="waiting" style="margin:0 0 10px"></p>
+        <div class="row"><button class="btn flame" id="sleep" data-i="sleep_btn"></button><button class="btn ghost" id="undo" data-i="undo_btn"></button></div>
+        <p class="note" id="nightmsg"></p>
+        <div id="lastnight"></div>
+      </div>
+    </div>
+
+    <div class="view" id="v-memory">
+      <h2 data-i="mem_h"></h2>
+      <p class="lead" data-i="mem_lead"></p>
+      <form class="row panel" id="memform"><input type="text" id="memtext" data-i-ph="mem_ph" data-i-aria="mem_aria" style="flex:1;min-width:180px"><button class="btn" data-i="save"></button></form>
+      <div class="panel"><ul class="plain" id="memlist"></ul></div>
+    </div>
+
+    <div class="view" id="v-files">
+      <h2 data-i="files_h"></h2>
+      <p class="lead" data-i="files_lead"></p>
+      <div class="panel drop" id="dropzone">
+        <p data-i="drop_here" style="margin:0 0 10px"></p>
+        <button class="btn" id="files-add" type="button" data-i="files_add"></button>
+        <p class="note" id="files-msg" aria-live="polite"></p>
+      </div>
+      <div class="panel"><ul class="plain" id="filelist"></ul></div>
+      <p class="note" data-i="files_note"></p>
+    </div>
+
+    <div class="view" id="v-personas">
+      <h2 data-i="per_h"></h2>
+      <p class="lead" data-i="per_lead"></p>
+      <div class="row" style="margin-bottom:14px"><button class="btn flame" id="new-char" data-i="new_char"></button></div>
+      <div class="cards" id="pcards"></div>
+      <form class="panel editor" id="editor" hidden>
+        <h3 id="ed-title" data-i="design_cta"></h3>
+        <p class="note" style="margin:0 0 12px" data-i="ed_note"></p>
+        <div class="grid">
+          <label class="f"><span data-i="ed_name"></span><input type="text" id="ed-name" maxlength="40" required></label>
+          <label class="f"><span data-i="ed_tag"></span><input type="text" id="ed-tag" maxlength="80" data-i-ph="ed_tag_ph"></label>
+        </div>
+        <label class="f" style="margin-top:10px"><span data-i="ed_pers"></span><textarea id="ed-pers" maxlength="600" rows="3" data-i-ph="ed_pers_ph"></textarea></label>
+        <div class="row ed-actions">
+          <button class="btn" id="ed-save" type="submit" data-i="ed_save"></button>
+          <button class="btn ghost" id="ed-cancel" type="button" data-i="cancel"></button>
+          <button class="btn danger" id="ed-del" type="button" hidden data-i="ed_del"></button>
+          <span class="note err" id="ed-msg" style="margin:0"></span>
+        </div>
+      </form>
+      <div id="refused"></div>
+      <p class="note" style="margin-top:18px" data-i="per_note"></p>
+    </div>
+
+    <div class="view" id="v-settings">
+      <h2 data-i="set_h"></h2>
+      <div class="panel"><h3 data-i="lang_h"></h3>
+        <div class="row" role="group" data-i-aria="lang_h"><button class="chip" data-lang="ar" lang="ar" type="button">العربية</button><button class="chip" data-lang="en" lang="en" type="button">English</button></div></div>
+      <div class="panel"><h3 data-i="data_h"></h3><p class="note" style="margin:0" data-i="data_p"></p></div>
+      <div class="panel"><h3 data-i="wipe_h"></h3><p class="note" style="margin:0 0 10px" data-i="wipe_p"></p>
+        <div class="row"><button class="btn danger" id="wipe" data-i="wipe_h"></button><span class="note" id="wipemsg" style="margin:0"></span></div></div>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import { createBrain } from "/web/brain.js";
+const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------- language (Arabic / English)
+const I18N = {ar: {"stage_aria": "المساعد", "brain_drag": "اسحب عشان تلفّ الدماغ", "design_cta": "شخصية جديدة", "local_title": "كل إشي بيصير على هاد الجهاز", "local": "🔒 محلي، بدون إنترنت", "tab_chat": "المحادثة", "tab_brain": "الدماغ", "tab_memory": "الذاكرة", "tab_personas": "الشخصيات", "tab_settings": "الإعدادات", "empty": "اكتب أول سؤال. إذا الجواب مش زي ما بدك، اكبس «صحّح» واكتب الجواب الصح: من تصحيحاتك بتعلّم بالليل.", "input_ph": "اكتب رسالتك…", "input_aria": "رسالتك", "send": "ابعت", "brain_h": "الدماغ", "brain_lead_core": "النموذج كله قاعد على القرص. بالرام بتضل بس الأجزاء اللي بتستعملها إنت.", "ram_h": "شو بالرام هلأ", "leg_skel": "الهيكل الثابت", "leg_core": "النواة الشخصية", "leg_cache": "كاش مؤقت", "leg_disk": "على القرص", "night_h": "التعلّم الليلي", "sleep_btn": "نام وتعلّم هلأ", "undo_btn": "ارجع عن آخر ليلة", "mem_h": "الذاكرة", "mem_lead": "هاد كل اللي بتذكره عنك. بتقدر تمحي أي سطر. وبالمحادثة، ابدأ رسالتك بـ «تذكّر:» عشان أحفظها.", "mem_ph": "إشي بدك أتذكره", "mem_aria": "ذكرى جديدة", "save": "احفظ", "per_h": "الشخصيات", "per_lead": "كل شخصية إلها اسم وطريقة حكي. أي شخصية لازم يكون مكتوب ببطاقتها مين صاحب حقوقها، والبطاقة اللي ما فيها حقوق ما بتشتغل.", "new_char": "اعمل شخصية جديدة", "ed_note": "الشخصية هي اسم وطريقة حكي. الدماغ جنب المحادثة بيضل نفسه، وبيتحرك حسب الحالة.", "ed_name": "الاسم", "ed_tag": "وصف قصير", "ed_tag_ph": "مثلاً: مساعدي بالبرمجة", "ed_pers": "شخصيتها وأسلوب حكيها", "ed_pers_ph": "مثلاً: هادي ومضحك، بيحكي باختصار، وبيحب يشرح بأمثلة", "ed_save": "احفظ الشخصية", "cancel": "إلغاء", "ed_del": "امحي الشخصية", "per_note": "لتضيف شخصية: حط ملف JSON بمجلد personas وفيه rights (original أو licensed أو public_domain).", "set_h": "الإعدادات والخصوصية", "lang_h": "اللغة", "data_h": "وين الداتا تبعتك", "data_p": "محادثاتك وتصحيحاتك وذاكرتك محفوظين بملف واحد على جهازك (data/pcore.db). السيرفر بيسمع على 127.0.0.1 بس، يعني ما حدا من برّا الجهاز بيوصله.", "wipe_h": "امحي كل إشي", "wipe_p": "بيمحي المحادثات والذاكرة وكل اللي تعلّمته عنك. ما في رجعة.", "morning_h": "صباح الخير", "ok_btn": "تمام", "m_undo": "ارجع لمبارح", "ok": "صح", "fix": "صحّح", "saved_ok": "انحفظ: رح أتعلّم منه بالليل", "fix_ph": "اكتب الجواب زي ما كان لازم يكون", "fix_aria": "الجواب الصح", "fix_save": "احفظ التصحيح", "saved_fix": "انحفظ التصحيح: رح أتعلّم منه بالليل", "thinking": "بفكر…", "asleep_err": "أنا نايمة وبتعلّم هلأ. جرّب بعد شوي.", "cant_answer": "ما قدرت أجاوب: ", "r_none": "ما كان في محادثات جديدة أقراها.", "r_saved": "قريت {n} رسالة من اليوم، وحفظت {k} أشياء عنك بالذاكرة:", "r_nothing": "قريت {n} رسالة من اليوم، وما لقيت إشي جديد يستاهل أحفظه.", "r_skipped": "ما تعلّمت إشي جديد: بدي أجوبة أكثر توافق عليها أو تصحّحها.", "r_learned": "تعلّمت من {n} جواب، منهم {c} تصحيح منك.", "r_example": "مثلاً: ", "r_passed": "نجحت بالامتحانين، فالتحديث ثبت.", "r_failed": "جرّبت أتعلّم بس ما نجحت بالامتحان، فرجعت لنسخة مبارح. ما خسرت إشي.", "r_core": "النواة الشخصية هلأ بتغطي {a} من استعمالك (كانت {b})، وتبدّل فيها {s} جزء.", "r_ram": "بحتاج بالرام {a} بدل {b}.", "mock": "وضع تجريبي: الأجوبة والأرقام مش حقيقية", "sleeping_status": "نايمة وبتتعلّم من اليوم…", "brain_lead_engine": "النموذج شغّال على جهازك بمحرك llama.cpp، ومضغوط 4-bit. ولا كلمة بتطلع للإنترنت.", "fl_cuda": "كرت NVIDIA (CUDA)", "fl_vulkan": "كرت الشاشة (Vulkan)", "fl_metal": "شريحة Apple (Metal)", "fl_cpu": "المعالج", "fl_custom": "محرك من عندك", "f_engine": "المحرك", "f_model": "النموذج", "f_size": "حجم النموذج", "f_gpu": "كرت الشاشة", "f_nogpu": "بدون، شغّال على المعالج", "f_ram": "رام الجهاز", "f_mem": "ذكريات محفوظة", "ram_aria": "بالرام {a} من {b}", "ram_text": "بالرام {a} من أصل {b}. الباقي ({c}) على القرص وبينقرأ بس لما يلزم.", "f_core": "أجزاء بالنواة", "f_hit": "طلبات انخدمت من النواة", "f_hitram": "انخدمت من الرام كله", "f_ssd": "قراءات من القرص", "f_nights": "ليالي تعلّم ثابتة", "wait_engine": "بالليل بقرا محادثات اليوم، وبحفظ بالذاكرة الأشياء المهمة اللي حكيتها عن حالك. بتقدر تشوفها وتمحيها من شاشة الذاكرة.", "wait_n": "{n} جواب مستنّي أتعلّم منه الليلة.", "wait_none": "ما في أجوبة جديدة أتعلّم منها. وافق على جواب أو صحّحه بالمحادثة.", "night_err": "صار خطأ بالتعلّم الليلي: ", "last_night": "آخر ليلة", "chosen": "مختارة", "choose": "اختارها", "rt_original": "شخصية أصلية", "rt_licensed": "مرخّصة", "rt_public": "ملك عام", "comma": "، ", "holder_user": "إنت", "edit": "عدّل", "refused_h": "بطاقات مرفوضة", "server_down": "السيرفر مش شغال", "undo_ok": "رجعت عن آخر ليلة.", "undo_none": "ما في ليلة أرجع عنها.", "delete": "امحي", "mem_empty": "لسا ما في إشي محفوظ.", "sure": "متأكد؟ اكبس كمان مرة", "wiped": "انمحى كل إشي.", "ed_edit": "عدّل {name}", "need_name": "اكتب اسم للشخصية.", "not_saved": "ما انحفظت: ", "tab_files": "الملفات", "files_h": "الملفات", "files_lead": "حط ملفات PDF أو Word أو نص، واسأل Eve عنها. الملفات بتضل على جهازك.", "drop_here": "اسحب الملفات لهون، أو", "files_add": "اختار ملف", "files_note": "Eve بتقرأ من الملفات بس لما تسألها، وما بتاخد منها إشي لتعلّم الليل. الـ PDF اللي هو صور (scan) ما فيه نص، فما بينقرأ.", "files_empty": "لسا ما في ملفات.", "f_use": "استعمله بالمحادثة", "f_used": "مرفق بالمحادثة", "f_del": "احذف", "kind_text": "نص", "file_meta": "{kind}، تقريباً {n} ألف حرف، {date}", "reading_file": "بقرأ {name}...", "file_ok": "قرأت {name}. اسألني عنه.", "ferr_bad_type": "ما بقدر أقرأ هاد النوع. بقرأ PDF وWord (docx) والنص (txt, md, csv).", "ferr_too_big": "الملف أكبر من 25 ميغا.", "ferr_pdf_no_text": "هاد الـ PDF صور بدون نص (scan)، فما بقدر أقرأه. جرّب نسخة فيها نص.", "ferr_pdf_locked": "الـ PDF مقفول بكلمة سر. افتح القفل وجرّب كمان مرة.", "ferr_bad_pdf": "ما قدرت أفتح الـ PDF. ممكن يكون خربان.", "ferr_bad_docx": "ما قدرت أفتح ملف الـ Word. لازم يكون docx، مش doc القديم.", "ferr_empty": "الملف فاضي.", "ferr_no_pdf_lib": "ناقص pypdf. شغّل: pip install -r requirements-app.txt", "ferr_other": "ما قدرت أقرأ {name}.", "attach_aria": "ارفق ملف", "detach": "شيل {name}", "sources": "من:", "age": "عمر الدماغ {d}، فيه {n} خلية", "f_age": "عمر الدماغ", "f_cells": "الخلايا", "f_files": "الملفات", "m_share": "شارك", "share_pick": "اختار شو يطلع بالصورة. ما بيطلع إلا اللي بتختاره.", "share_preview": "صورة للمشاركة", "share_save": "نزّل الصورة", "share_native": "شارك", "share_title": "Eve تعلّمت عني {k} الليلة", "share_title_0": "Eve رتّبت ذكرياتها الليلة", "share_foot": "بتشتغل على جهازي، بدون إنترنت"}, en: {"stage_aria": "The assistant", "brain_drag": "Drag to turn the brain", "design_cta": "New character", "local_title": "Everything happens on this device", "local": "🔒 Local, offline", "tab_chat": "Chat", "tab_brain": "Brain", "tab_memory": "Memory", "tab_personas": "Characters", "tab_settings": "Settings", "empty": "Ask your first question. If an answer isn't what you wanted, press “Fix” and write the right one: I learn from your fixes at night.", "input_ph": "Write a message…", "input_aria": "Your message", "send": "Send", "brain_h": "Brain", "brain_lead_core": "The whole model sits on disk. Only the parts you use stay in RAM.", "ram_h": "What is in RAM now", "leg_skel": "Fixed skeleton", "leg_core": "Personal core", "leg_cache": "Cache", "leg_disk": "On disk", "night_h": "Learning at night", "sleep_btn": "Sleep and learn now", "undo_btn": "Undo last night", "mem_h": "Memory", "mem_lead": "This is everything I remember about you. You can delete any line. In the chat, start a message with “remember:” to save it.", "mem_ph": "Something to remember", "mem_aria": "New memory", "save": "Save", "per_h": "Characters", "per_lead": "Each character has a name and a way of talking. Every card must say who holds its rights; a card without rights is not loaded.", "new_char": "Create a new character", "ed_note": "A character is a name and a way of talking. The brain next to the chat stays the same and reacts to what is happening.", "ed_name": "Name", "ed_tag": "Short description", "ed_tag_ph": "e.g. my coding helper", "ed_pers": "Personality and way of talking", "ed_pers_ph": "e.g. calm and funny, keeps it short, explains with examples", "ed_save": "Save character", "cancel": "Cancel", "ed_del": "Delete character", "per_note": "To add a character: put a JSON file in the personas folder with a rights block (original, licensed or public_domain).", "set_h": "Settings and privacy", "lang_h": "Language", "data_h": "Where your data is", "data_p": "Your chats, fixes and memory are kept in one file on this device (data/pcore.db). The server only listens on 127.0.0.1, so nothing outside this device can reach it.", "wipe_h": "Delete everything", "wipe_p": "Deletes the chats, the memory and everything I learned about you. This cannot be undone.", "morning_h": "Good morning", "ok_btn": "OK", "m_undo": "Go back to yesterday", "ok": "Right", "fix": "Fix", "saved_ok": "Saved: I'll learn from it tonight", "fix_ph": "Write the answer as it should have been", "fix_aria": "The right answer", "fix_save": "Save fix", "saved_fix": "Fix saved: I'll learn from it tonight", "thinking": "Thinking…", "asleep_err": "I'm asleep and learning right now. Try again in a bit.", "cant_answer": "Couldn't answer: ", "r_none": "There were no new chats to read.", "r_saved": "I read {n} messages from today and saved {k} things about you:", "r_nothing": "I read {n} messages from today and found nothing new worth keeping.", "r_skipped": "Nothing new learned: I need more answers you approve or fix.", "r_learned": "I learned from {n} answers, {c} of them your fixes.", "r_example": "For example: ", "r_passed": "I passed both exams, so the update stays.", "r_failed": "I tried to learn but failed the exam, so I went back to yesterday. Nothing was lost.", "r_core": "The personal core now covers {a} of your usage (was {b}); {s} parts were swapped.", "r_ram": "I need {a} of RAM instead of {b}.", "mock": "Demo mode: answers and numbers are not real", "sleeping_status": "Asleep, learning from today…", "brain_lead_engine": "The model runs on this device with llama.cpp, compressed to 4-bit. Not a word goes to the internet.", "fl_cuda": "NVIDIA GPU (CUDA)", "fl_vulkan": "Graphics card (Vulkan)", "fl_metal": "Apple chip (Metal)", "fl_cpu": "CPU", "fl_custom": "Your own engine", "f_engine": "Engine", "f_model": "Model", "f_size": "Model size", "f_gpu": "Graphics card", "f_nogpu": "None, running on the CPU", "f_ram": "RAM", "f_mem": "Saved memories", "ram_aria": "{a} of {b} in RAM", "ram_text": "{a} of {b} is in RAM. The rest ({c}) stays on disk and is read only when needed.", "f_core": "Parts in the core", "f_hit": "Served from the core", "f_hitram": "Served from RAM", "f_ssd": "Disk reads", "f_nights": "Nights learned", "wait_engine": "At night I read today's chats and save the important things you told me about yourself. You can see and delete them in Memory.", "wait_n": "{n} answers waiting for tonight.", "wait_none": "No new answers to learn from. Approve or fix an answer in the chat.", "night_err": "Night learning failed: ", "last_night": "Last night", "chosen": "Selected", "choose": "Choose", "rt_original": "Original character", "rt_licensed": "Licensed", "rt_public": "Public domain", "comma": ", ", "holder_user": "you", "edit": "Edit", "refused_h": "Refused cards", "server_down": "The server is not running", "undo_ok": "Last night undone.", "undo_none": "No night to undo.", "delete": "Delete", "mem_empty": "Nothing saved yet.", "sure": "Sure? Press again", "wiped": "Everything deleted.", "ed_edit": "Edit {name}", "need_name": "Give the character a name.", "not_saved": "Not saved: ", "tab_files": "Files", "files_h": "Files", "files_lead": "Add PDF, Word or text files and ask Eve about them. The files stay on your computer.", "drop_here": "Drop files here, or", "files_add": "Choose a file", "files_note": "Eve reads your files only when you ask, and nothing from them goes into the nightly learning. A scanned PDF is only pictures, so it has no text to read.", "files_empty": "No files yet.", "f_use": "Use in chat", "f_used": "Attached to chat", "f_del": "Delete", "kind_text": "Text", "file_meta": "{kind}, about {n}k characters, {date}", "reading_file": "Reading {name}…", "file_ok": "Read {name}. Ask me about it.", "ferr_bad_type": "I can't read this type. I read PDF, Word (docx) and text (txt, md, csv).", "ferr_too_big": "The file is bigger than 25 MB.", "ferr_pdf_no_text": "This PDF is scanned pictures with no text, so I can't read it. Try a copy that has text.", "ferr_pdf_locked": "The PDF is locked with a password. Unlock it and try again.", "ferr_bad_pdf": "Couldn't open the PDF. It may be damaged.", "ferr_bad_docx": "Couldn't open the Word file. It must be .docx, not the old .doc.", "ferr_empty": "The file is empty.", "ferr_no_pdf_lib": "pypdf is missing. Run: pip install -r requirements-app.txt", "ferr_other": "Couldn't read {name}.", "attach_aria": "Attach a file", "detach": "Remove {name}", "sources": "From:", "age": "Brain age {d}, {n} cells", "f_age": "Brain age", "f_cells": "Cells", "f_files": "Files", "m_share": "Share", "share_pick": "Pick what goes on the image. Only what you tick is shown.", "share_preview": "Image to share", "share_save": "Download image", "share_native": "Share", "share_title": "Eve learned {k} about me last night", "share_title_0": "Eve sorted her memories last night", "share_foot": "Runs on my computer, offline"}};
+let lang = "ar";
+try { lang = localStorage.getItem("lang") || ((navigator.language || "").toLowerCase().startsWith("ar") ? "ar" : "en"); } catch (e) {}
+if (!I18N[lang]) lang = "en";
+const tr = (k, v = {}) => String(I18N[lang][k] ?? I18N.ar[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? "—");
+const nameOf = (p) => (lang === "en" && p.name_en) || p.name;
+const tagOf = (p) => (lang === "en" ? p.tagline_en : p.tagline) || p.tagline || "";
+const holderOf = (p) => p.created_by === "user" ? tr("holder_user") : (lang === "en" && p.rights.holder_en) || p.rights.holder || "";
+function applyLang() {
+  document.documentElement.lang = lang; document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-i]").forEach((e) => { e.textContent = tr(e.dataset.i); });
+  document.querySelectorAll("[data-i-ph]").forEach((e) => { e.placeholder = tr(e.dataset.iPh); });
+  document.querySelectorAll("[data-i-aria]").forEach((e) => { e.setAttribute("aria-label", tr(e.dataset.iAria)); });
+  document.querySelectorAll("[data-i-title]").forEach((e) => { e.title = tr(e.dataset.iTitle); });
+  document.querySelectorAll("[data-lang]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+  const other = lang === "ar" ? "en" : "ar";
+  $("langbtn").textContent = other === "en" ? "English" : "العربية"; $("langbtn").lang = other;
+}
+function setLang(v) {
+  lang = v; try { localStorage.setItem("lang", v); } catch (e) {}
+  applyLang();
+  if (editing) $("ed-title").textContent = editing.id ? tr("ed_edit", {name: $("ed-name").value}) : tr("design_cta");
+  if (state) render();
+  if (document.querySelector("#v-memory.on")) loadMem();
+}
+const log = $("log"), input = $("input");
+let curMood = "neutral", editing = null;
+let state = null, busy = false, moodTimer = null;
+let conv = "default";
+try { conv = localStorage.getItem("conv") || ("c" + Date.now()); localStorage.setItem("conv", conv); } catch (e) { conv = "c" + Date.now(); }
+const history = [];
+
+const api = async (path, method = "GET", body) => {
+  const r = await fetch(path, {method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(m); }
+  return r.json();
+};
+const gb = (b) => (b / 1e9).toFixed(2) + " GB";
+const pct = (x) => x == null ? "—" : Math.round(x * 100) + "%";
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+// ---------------------------------------------------------------- the brain: the face of the assistant
+let brain = null, brainFailed = false;
+function ensureBrain() {
+  if (brain || brainFailed) return brain;
+  brain = createBrain($("brain3d"));
+  if (!brain) brainFailed = true;
+  else { brain.setMood(curMood); brain.advance(1.5); }
+  return brain;
+}
+function showCharacter() {
+  if (brainFailed) return;
+  document.body.classList.add("isbrain");          // visible first, so WebGL starts with a real size
+  if (!ensureBrain()) document.body.classList.remove("isbrain");
+}
+function setMood(mood, hold) {
+  clearTimeout(moodTimer);
+  curMood = mood; brain?.setMood(mood);
+  if (hold) moodTimer = setTimeout(() => { if (!state || !state.sleeping) { curMood = "neutral"; brain?.setMood("neutral"); } }, hold);
+}
+function setTalking(on) { brain?.setTalking(on); }
+function setStatus(t) { $("status").textContent = t; }
+
+// ---------------------------------------------------------------- chat
+function addMsg(role, text, id) {
+  $("empty")?.remove();
+  const m = el("div", "msg " + (role === "user" ? "user" : "bot"));
+  const b = el("div", "b", text); b.dir = "auto"; m.append(b);
+  if (role !== "user") { const a = el("div", "acts"); m.append(a); if (id) fillActs(a, id, b); }
+  log.append(m); log.scrollTop = log.scrollHeight;
+  return m;
+}
+function fillActs(a, id, bubble) {
+  a.replaceChildren();
+  const ok = el("button", "", tr("ok")), fix = el("button", "", tr("fix"));
+  ok.onclick = async () => { await api("/api/feedback", "POST", {message_id: id, action: "approve"}); a.replaceChildren(el("span", "saved", tr("saved_ok"))); setMood("happy", 2500); refresh(); };
+  fix.onclick = () => {
+    const box = el("div", "fix"), ta = el("textarea"), row = el("div", "row");
+    ta.placeholder = tr("fix_ph"); ta.setAttribute("aria-label", tr("fix_aria"));
+    const save = el("button", "btn", tr("fix_save")), cancel = el("button", "btn ghost", tr("cancel"));
+    save.onclick = async () => {
+      if (!ta.value.trim()) { ta.focus(); return; }
+      await api("/api/feedback", "POST", {message_id: id, action: "correct", correction: ta.value.trim()});
+      a.replaceChildren(el("span", "saved", tr("saved_fix"))); refresh();
+    };
+    cancel.onclick = () => fillActs(a, id, bubble);
+    row.append(save, cancel); box.append(ta, row); a.replaceChildren(box); ta.focus();
+  };
+  a.append(ok, fix);
+}
+
+async function send(text) {
+  busy = true; $("send").disabled = true;
+  addMsg("user", text); history.push({role: "user", content: text});
+  const m = addMsg("bot", ""), bubble = m.querySelector(".b"), acts = m.querySelector(".acts");
+  setMood("thinking"); setStatus(tr("thinking"));
+  let full = "", meta = null, started = false;
+  try {
+    const r = await fetch("/v1/chat/completions", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({messages: history, stream: true, user: conv, docs: attached.map((a) => a.id)})});
+    if (!r.ok) { let d = r.statusText; try { d = (await r.json()).detail || d; } catch (e) {} throw new Error(r.status === 503 ? tr("asleep_err") : d); }
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+        if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+        const j = JSON.parse(line.slice(6));
+        if (j.error) throw new Error(j.error.message);
+        const piece = j.choices?.[0]?.delta?.content;
+        if (piece) {
+          if (!started) { started = true; setMood("neutral"); setTalking(true); setStatus(""); }
+          full += piece; bubble.textContent = full; log.scrollTop = log.scrollHeight; brain?.pulse();
+        }
+        if (j.pcore) meta = j.pcore;
+      }
+    }
+    history.push({role: "assistant", content: full.trim()});
+    if (meta?.sources?.length) m.insertBefore(sourcesLine(meta.sources), acts);
+    if (meta?.message_id) fillActs(acts, meta.message_id, bubble);
+    setTalking(false);
+    setMood(meta?.emotion && meta.emotion !== "thinking" ? meta.emotion : "neutral", 5000);
+  } catch (e) {
+    setTalking(false); setMood("sad", 4000);
+    bubble.textContent = tr("cant_answer") + e.message; bubble.classList.add("err"); history.pop();
+  }
+  setStatus(""); busy = false; $("send").disabled = false; refresh();
+}
+$("form").addEventListener("submit", (e) => { e.preventDefault(); const t = input.value.trim(); if (!t || busy || state?.sleeping) return; input.value = ""; send(t); });
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } });
+input.addEventListener("focus", () => document.body.classList.add("typing"));
+input.addEventListener("blur", () => document.body.classList.remove("typing"));
+
+// ---------------------------------------------------------------- tabs
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === "v-" + b.dataset.v));
+  if (b.dataset.v === "memory") loadMem();
+  if (b.dataset.v === "files") loadFiles();
+  refresh();
+});
+
+// ---------------------------------------------------------------- state
+function reportLines(r) {
+  const out = [];
+  const L = r.learning || {}, C = r.core || {};
+  if (L.mode === "memory") {
+    const n = (L.new_memories || []).length;
+    if (!L.messages_read) out.push(tr("r_none"));
+    else if (n) {
+      out.push(tr("r_saved", {n: L.messages_read, k: n}));
+      L.new_memories.slice(0, 4).forEach((t) => out.push(t));
+    } else out.push(tr("r_nothing", {n: L.messages_read}));
+  }
+  if (L.skipped) out.push(tr("r_skipped"));
+  else if (L.accepted) {
+    out.push(tr("r_learned", {n: L.new_examples, c: L.corrections}));
+    (L.samples || []).slice(0, 2).forEach((s) => out.push(tr("r_example") + s));
+    out.push(tr("r_passed"));
+  } else if (L.reasons) out.push(tr("r_failed"));
+  if (C.coverage_after != null) {
+    out.push(tr("r_core", {a: pct(C.coverage_after), b: pct(C.coverage_before), s: C.swapped}));
+  }
+  if (r.ram) out.push(tr("r_ram", {a: gb(r.ram.hot_core_bytes + r.ram.skeleton_bytes), b: gb(r.ram.all_experts_bytes + r.ram.skeleton_bytes)}));
+  return out;
+}
+
+function render() {
+  const s = state; if (!s) return;
+  const pname = nameOf(s.persona);
+  if (editing) { $("p-name").textContent = $("ed-name").value.trim() || tr("design_cta"); $("p-tag").textContent = $("ed-tag").value.trim(); }
+  else { $("p-name").textContent = pname; $("p-tag").textContent = tagOf(s.persona); }
+  document.title = pname;
+  $("mode").textContent = s.backend === "mock" ? tr("mock") : s.model;
+  document.body.classList.toggle("asleep", s.sleeping);
+  if (s.sleeping) { setMood("sleeping"); setStatus(tr("sleeping_status")); }
+  else if (curMood === "sleeping") { setMood("happy", 3000); setStatus(""); }
+  input.disabled = s.sleeping; $("send").disabled = s.sleeping || busy; $("sleep").disabled = s.sleeping; $("undo").disabled = s.sleeping;
+
+  const mo = $("morning");
+  if (s.morning && !s.sleeping) {
+    $("m-list").replaceChildren(...reportLines(s.morning).map((t) => el("li", "", t)));
+    $("m-undo").hidden = !(s.morning.learning && s.morning.learning.accepted);
+    if (!mo.classList.contains("on")) closeShare();
+    mo.classList.add("on");
+  } else { mo.classList.remove("on"); closeShare(); }
+
+  const b = s.brain;
+  const engine = !!b.engine;
+  $("rampanel").hidden = engine; $("undo").hidden = engine;
+  if (engine) {
+    $("brain-lead").textContent = tr("brain_lead_engine");
+    const where = ({cuda: tr("fl_cuda"), vulkan: tr("fl_vulkan"), metal: tr("fl_metal"), cpu: tr("fl_cpu"), custom: tr("fl_custom")})[b.flavor] || b.flavor || "";
+    const facts = [[tr("f_engine"), "llama.cpp · " + where], [tr("f_model"), b.model || ""], [tr("f_size"), b.model_bytes ? gb(b.model_bytes) : "?"],
+      [tr("f_gpu"), b.gpu || tr("f_nogpu")], [tr("f_ram"), b.ram_gb ? b.ram_gb.toFixed(0) + " GB" : "?"],
+      [tr("f_mem"), String(s.counts.memories)], [tr("f_files"), String(s.growth?.files ?? 0)],
+      [tr("f_age"), s.growth ? daysText(s.growth.days) : "?"],
+      [tr("f_cells"), s.growth ? cellsOf(s.growth).toLocaleString("en-US") + " / " + maxCells().toLocaleString("en-US") : "?"]];
+    $("facts").replaceChildren(...facts.map(([k, v]) => { const d = el("div"); d.append(el("dt", "", k), el("dd", "", v)); return d; }));
+  } else {
+    $("brain-lead").textContent = tr("brain_lead_core");
+    const total = b.skeleton_bytes + b.all_experts_bytes;
+    const w = (x) => (100 * x / total).toFixed(1) + "%";
+    const bar = $("rambar"); bar.replaceChildren();
+    [["k", b.skeleton_bytes], ["h", b.hot_ram_bytes], ["c", b.cache_ram_bytes]].forEach(([c, v]) => { const sp = el("span", c); sp.style.width = w(v); bar.append(sp); });
+    const inRam = b.skeleton_bytes + b.hot_ram_bytes + b.cache_ram_bytes;
+    bar.setAttribute("aria-label", tr("ram_aria", {a: gb(inRam), b: gb(total)}));
+    $("ramtext").textContent = tr("ram_text", {a: gb(inRam), b: gb(total), c: gb(total - inRam)});
+    const facts = [[tr("f_core"), `${b.hot_experts} / ${b.total_experts}`], [tr("f_hit"), pct(b.hit_rate_hot)],
+      [tr("f_hitram"), pct(b.hit_rate_ram)], [tr("f_ssd"), String(b.ssd_loads)], [tr("f_nights"), String(s.counts.adapters)]];
+    $("facts").replaceChildren(...facts.map(([k, v]) => { const d = el("div"); d.append(el("dt", "", k), el("dd", "", v)); return d; }));
+  }
+  $("waiting").textContent = engine ? tr("wait_engine") : s.counts.examples_waiting ? tr("wait_n", {n: s.counts.examples_waiting}) : tr("wait_none");
+  $("nightmsg").textContent = s.night_error ? tr("night_err") + s.night_error : "";
+  $("nightmsg").className = "note" + (s.night_error ? " err" : "");
+  const ln = $("lastnight"); ln.replaceChildren();
+  if (s.last_report) { const ul = el("ul"); ul.append(...reportLines(s.last_report).map((t) => el("li", "", t))); ln.append(el("h3", "", tr("last_night")), ul); }
+
+  $("pcards").replaceChildren(...s.personas.map((p) => {
+    const wrap = el("div", "pcard"); wrap.setAttribute("aria-pressed", p.id === s.persona.id);
+    const pick = el("button", "chip", p.id === s.persona.id ? tr("chosen") : tr("choose"));
+    pick.setAttribute("aria-pressed", p.id === s.persona.id);
+    pick.onclick = async () => { await api("/api/persona", "POST", {id: p.id}); refresh(); };
+    wrap.append(el("b", "", nameOf(p)), el("small", "", tagOf(p)), el("br"),
+      el("span", "tag", ({original: tr("rt_original"), licensed: tr("rt_licensed"), public_domain: tr("rt_public")})[p.rights.type] + (holderOf(p) ? tr("comma") + holderOf(p) : "")));
+    const row = el("div", "row"); row.style.marginTop = "10px"; row.append(pick);
+    if (p.created_by === "user") { const ed = el("button", "chip", tr("edit")); ed.onclick = () => openEditor(p); row.append(ed); }
+    wrap.append(row);
+    return wrap;
+  }));
+  showCharacter();
+  if (brain && s.growth) { brain.setGrowth(s.growth.value, !grown); grown = true; }
+  if (s.growth) $("p-age").textContent = ageText(s.growth);
+  const ref = Object.entries(s.refused_personas || {});
+  $("refused").replaceChildren(...(ref.length ? [el("h3", "", tr("refused_h")), ...ref.map(([f, why]) => el("p", "note err", f + ": " + why))] : []));
+}
+async function refresh() { try { state = await api("/api/state"); render(); } catch (e) { setStatus(tr("server_down")); } }
+setInterval(() => { if (state?.sleeping || document.querySelector("#v-brain.on")) refresh(); }, 2500);
+
+$("m-ok").onclick = async () => { await api("/api/morning/seen", "POST"); refresh(); };
+$("m-undo").onclick = async () => { try { await api("/api/rollback", "POST"); } catch (e) {} await api("/api/morning/seen", "POST"); refresh(); };
+$("sleep").onclick = async () => { try { await api("/api/night", "POST"); } catch (e) { $("nightmsg").textContent = e.message; } refresh(); };
+$("undo").onclick = async () => { try { await api("/api/rollback", "POST"); $("nightmsg").textContent = tr("undo_ok"); } catch (e) { $("nightmsg").textContent = tr("undo_none"); } refresh(); };
+
+// ---------------------------------------------------------------- growth
+let grown = false;
+const maxCells = () => brain?.stats().max || 2600;
+const cellsOf = (g) => Math.round(maxCells() * g.value);
+function daysText(d) {
+  if (lang !== "ar") return d === 1 ? "1 day" : d + " days";
+  return d === 1 ? "يوم واحد" : d === 2 ? "يومين" : d <= 10 ? d + " أيام" : d + " يوم";
+}
+function thingsText(k) {
+  if (lang !== "ar") return k === 1 ? "1 new thing" : k + " new things";
+  return k === 1 ? "شغلة جديدة" : k === 2 ? "شغلتين جداد" : k <= 10 ? k + " أشياء جديدة" : k + " شغلة جديدة";
+}
+const ageText = (g) => tr("age", {d: daysText(g.days), n: cellsOf(g).toLocaleString("en-US")});
+
+// ---------------------------------------------------------------- sharing the morning card
+// Nothing personal leaves unless the user ticks it: by default the image shows only the brain,
+// how many things were learned, and its age.
+function closeShare() { $("m-sharebox").hidden = true; $("m-share").hidden = false; shotImg = null; }
+function shareItems() { return (state?.morning?.learning?.new_memories || []).slice(0, 6); }
+$("m-share").onclick = () => {
+  const box = $("m-pick"), items = shareItems();
+  box.replaceChildren(...items.map((t, i) => {
+    const lab = el("label"), cb = el("input"); cb.type = "checkbox"; cb.dataset.i = i; cb.onchange = drawShare;
+    lab.append(cb, el("span", "", t)); return lab;
+  }));
+  $("m-sharebox").hidden = false; $("m-share").hidden = true;
+  let canFiles = false;
+  try { canFiles = !!(navigator.canShare && navigator.canShare({files: [new File([""], "x.png", {type: "image/png"})]})); } catch (e) {}
+  $("m-native").hidden = !canFiles;
+  drawShare();
+};
+$("m-back").onclick = closeShare;
+
+function wrapLines(ctx, text, width, max) {
+  const words = text.split(/\s+/).filter(Boolean), lines = []; let line = "", used = 0;
+  for (const w of words) {
+    const t = line ? line + " " + w : w;
+    if (ctx.measureText(t).width > width && line) {
+      lines.push(line); line = w;
+      if (lines.length === max) { line = ""; break; }
+    } else line = t;
+    used++;
+  }
+  if (line && lines.length < max) lines.push(line);
+  if (used < words.length) lines[lines.length - 1] = lines[lines.length - 1].replace(/\s*\S*$/, "") + "…";
+  return lines;
+}
+let shotImg = null;
+async function drawShare() {
+  const cv = $("m-canvas"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  const font = getComputedStyle(document.body).fontFamily, rtl = lang === "ar";
+  if (!shotImg && brain) {
+    const img = new Image(); img.src = brain.snapshot();
+    try { await img.decode(); shotImg = img; } catch (e) {}
+  }
+  ctx.save();
+  ctx.fillStyle = "#05060d"; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, 540, 40, W / 2, 540, 780);
+  g.addColorStop(0, "#241256"); g.addColorStop(0.55, "#0b0b22"); g.addColorStop(1, "#05060d");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(25,227,255,0.05)"; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 54) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 54) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  const br = (x, y, dx, dy, c) => { ctx.strokeStyle = c; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x + dx * 60, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * 60); ctx.stroke(); };
+  br(40, 40, 1, 1, "#19e3ff"); br(W - 40, 40, -1, 1, "#ff2bd6"); br(40, H - 40, 1, -1, "#ff2bd6"); br(W - 40, H - 40, -1, -1, "#19e3ff");
+  // measure the text first, so the brain shrinks to make room for it
+  ctx.direction = rtl ? "rtl" : "ltr";
+  const k = (state?.morning?.learning?.new_memories || []).length;
+  const title = k ? tr("share_title", {k: thingsText(k)}) : tr("share_title_0");
+  ctx.font = `700 52px ${font}`;
+  const tLines = wrapLines(ctx, title, W - 160, 2);
+  const picked = [...document.querySelectorAll("#m-pick input:checked")].map((c) => shareItems()[+c.dataset.i]).slice(0, 3);
+  ctx.font = `400 34px ${font}`;
+  const pLines = picked.map((t) => wrapLines(ctx, t, W - 220, 2));
+  const textH = tLines.length * 68 + pLines.reduce((h, ls) => h + ls.length * 46 + 8, 0) + 4;
+  const top = Math.min(1000, H - 175 - textH + 52);         // baseline of the first title line
+  const side = Math.max(380, Math.min(740, top - 70 - 200));
+  if (shotImg?.naturalWidth) {                         // the middle of the live brain canvas
+    const sw = shotImg.naturalWidth, sh = shotImg.naturalHeight, cut = Math.min(sw, sh) * 0.92;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(shotImg, (sw - cut) / 2, (sh - cut) / 2, cut, cut, W / 2 - side / 2, 200 + (740 - side) / 4, side, side);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  ctx.textBaseline = "alphabetic"; ctx.direction = "ltr"; ctx.textAlign = "center";
+  ctx.shadowColor = "rgba(25,227,255,0.85)"; ctx.shadowBlur = 30; ctx.fillStyle = "#ffffff";
+  ctx.font = `800 108px ${font}`; ctx.fillText("Eve", W / 2, 170);
+  ctx.shadowBlur = 0;
+  ctx.direction = rtl ? "rtl" : "ltr";
+  ctx.fillStyle = "#ffffff"; ctx.font = `700 52px ${font}`;
+  let y = top;
+  for (const l of tLines) { ctx.fillText(l, W / 2, y); y += 68; }
+  ctx.font = `400 34px ${font}`; ctx.fillStyle = "#d6e4ff"; y += 4;
+  for (const ls of pLines) {
+    ls.forEach((l, j) => { ctx.fillText((j ? "" : "• ") + l, W / 2, y); y += 46; });
+    y += 8;
+  }
+  if (state?.growth) { ctx.font = `600 31px ${font}`; ctx.fillStyle = "#19e3ff"; ctx.fillText(ageText(state.growth), W / 2, H - 118); }
+  ctx.font = `400 28px ${font}`; ctx.fillStyle = "#8ea3c7"; ctx.fillText(tr("share_foot"), W / 2, H - 74);
+  ctx.restore();
+}
+const shareBlob = () => new Promise((r) => $("m-canvas").toBlob(r, "image/png"));
+$("m-save").onclick = async () => {
+  await drawShare();
+  const url = URL.createObjectURL(await shareBlob()), a = el("a");
+  a.href = url; a.download = "eve-" + (state?.morning?.night || "morning") + ".png"; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+$("m-native").onclick = async () => {
+  await drawShare();
+  const file = new File([await shareBlob()], "eve.png", {type: "image/png"});
+  try { await navigator.share({files: [file]}); } catch (e) {}
+};
+
+// ---------------------------------------------------------------- files
+let attached = [];
+try { attached = JSON.parse(localStorage.getItem("attached") || "[]"); } catch (e) {}
+function saveAttached() { try { localStorage.setItem("attached", JSON.stringify(attached)); } catch (e) {} renderAttached(); }
+function renderAttached() {
+  const box = $("attached");
+  box.hidden = !attached.length;
+  box.replaceChildren(...attached.map((a) => {
+    const c = el("span", "fchip"), x = el("button", "", "×");
+    x.type = "button"; x.setAttribute("aria-label", tr("detach", {name: a.name}));
+    x.onclick = () => { attached = attached.filter((b) => b.id !== a.id); saveAttached(); };
+    c.append(el("span", "", "📄 " + a.name), x); return c;
+  }));
+}
+function sourcesLine(sources) {
+  const d = el("div", "src"); d.append(el("span", "", tr("sources")));
+  sources.forEach((f) => d.append(el("span", "fchip", "📄 " + f.name)));
+  return d;
+}
+async function uploadFile(file) {
+  const r = await fetch("/api/files?name=" + encodeURIComponent(file.name), {method: "POST", body: file});
+  if (!r.ok) {
+    let code = ""; try { code = (await r.json()).detail?.code || ""; } catch (e) {}
+    throw new Error(I18N[lang]["ferr_" + code] ? tr("ferr_" + code) : tr("ferr_other", {name: file.name}));
+  }
+  return r.json();
+}
+async function addFiles(files, attach) {
+  const msg = $("files-msg");
+  for (const f of files) {
+    setMood("thinking"); setStatus(tr("reading_file", {name: f.name}));
+    msg.textContent = tr("reading_file", {name: f.name}); msg.classList.remove("err");
+    try {
+      const d = await uploadFile(f);
+      if (attach && !attached.some((a) => a.id === d.id)) { attached.push({id: d.id, name: d.name}); saveAttached(); }
+      setMood("happy", 2500); setStatus(""); msg.textContent = tr("file_ok", {name: d.name});
+    } catch (e) {
+      setMood("confused", 3000); setStatus(""); msg.textContent = e.message; msg.classList.add("err");
+      if (attach) addMsg("bot", e.message).querySelector(".b").classList.add("err");
+    }
+  }
+  if (document.querySelector("#v-files.on")) loadFiles();
+  refresh();
+}
+async function loadFiles() {
+  const list = await api("/api/files"), ul = $("filelist");
+  attached = attached.filter((a) => list.some((f) => f.id === a.id)); saveAttached();
+  const kinds = {pdf: "PDF", docx: "Word", text: tr("kind_text")};
+  ul.replaceChildren(...(list.length ? list.map((f) => {
+    const li = el("li"), info = el("span"), row = el("div", "row");
+    info.append(el("b", "", f.name), el("span", "meta", tr("file_meta", {kind: kinds[f.kind] || f.kind,
+      n: Math.max(1, Math.round(f.chars / 1000)).toLocaleString("en-US"), date: new Date(f.created * 1000).toLocaleDateString(lang === "ar" ? "ar-u-nu-latn" : "en")})));
+    const on = attached.some((a) => a.id === f.id);
+    const use = el("button", "chip", on ? tr("f_used") : tr("f_use")); use.setAttribute("aria-pressed", on);
+    use.onclick = () => { attached = on ? attached.filter((a) => a.id !== f.id) : [...attached, {id: f.id, name: f.name}]; saveAttached(); loadFiles(); };
+    const del = el("button", "chip", tr("f_del"));
+    del.onclick = async () => { await api("/api/files/" + f.id, "DELETE"); attached = attached.filter((a) => a.id !== f.id); saveAttached(); loadFiles(); refresh(); };
+    row.append(use, del); li.append(info, row); return li;
+  }) : [el("li", "note", tr("files_empty"))]));
+}
+$("attach").onclick = () => $("filepick").click();
+$("filepick").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; addFiles(f, !document.querySelector("#v-files.on")); };
+$("files-add").onclick = () => $("filepick").click();
+function dropTarget(zone, attach) {
+  zone.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); zone.classList.add("dropping"); } });
+  zone.addEventListener("dragleave", (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dropping"); });
+  zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("dropping"); addFiles([...e.dataTransfer.files], attach); });
+}
+dropTarget($("v-chat"), true); dropTarget($("dropzone"), false);
+renderAttached();
+
+// ---------------------------------------------------------------- memory
+async function loadMem() {
+  const list = await api("/api/memories"), ul = $("memlist");
+  ul.replaceChildren(...(list.length ? list.map((m) => {
+    const li = el("li"), del = el("button", "btn ghost", tr("delete"));
+    del.onclick = async () => { await api("/api/memories/" + m.id, "DELETE"); loadMem(); };
+    li.append(el("span", "", m.text), del); return li;
+  }) : [el("li", "note", tr("mem_empty"))]));
+}
+$("memform").addEventListener("submit", async (e) => { e.preventDefault(); const t = $("memtext").value.trim(); if (!t) return; await api("/api/memories", "POST", {text: t}); $("memtext").value = ""; loadMem(); });
+
+// wipe: two-step button instead of a browser dialog
+let armed = false;
+$("wipe").onclick = async () => {
+  if (!armed) { armed = true; $("wipe").textContent = tr("sure"); setTimeout(() => { armed = false; $("wipe").textContent = tr("wipe_h"); }, 5000); return; }
+  armed = false; $("wipe").textContent = tr("wipe_h");
+  await api("/api/wipe", "POST"); history.length = 0; log.replaceChildren(); $("wipemsg").textContent = tr("wiped"); refresh();
+};
+
+// ---------------------------------------------------------------- characters: a name and a way of talking
+function openEditor(p) {
+  editing = { id: p?.id || null };
+  $("ed-title").textContent = p ? tr("ed_edit", {name: p.name}) : tr("design_cta");
+  $("ed-name").value = p?.name || ""; $("ed-tag").value = p?.tagline || ""; $("ed-pers").value = p?.personality || "";
+  $("ed-del").hidden = !p; $("ed-msg").textContent = "";
+  $("editor").hidden = false; $("pcards").hidden = true; $("new-char").hidden = true;
+  $("ed-name").focus();
+}
+function closeEditor() {
+  editing = null; $("editor").hidden = true; $("pcards").hidden = false; $("new-char").hidden = false;
+  setTalking(false); setMood("neutral"); refresh();
+}
+$("ed-name").addEventListener("input", () => { if (editing) $("p-name").textContent = $("ed-name").value.trim() || tr("design_cta"); });
+$("ed-tag").addEventListener("input", () => { if (editing) $("p-tag").textContent = $("ed-tag").value.trim(); });
+$("new-char").onclick = () => openEditor(null);
+$("ed-cancel").onclick = closeEditor;
+let delArmed = false;
+$("ed-del").onclick = async () => {
+  if (!delArmed) { delArmed = true; $("ed-del").textContent = tr("sure"); setTimeout(() => { delArmed = false; $("ed-del").textContent = tr("ed_del"); }, 5000); return; }
+  delArmed = false; $("ed-del").textContent = tr("ed_del");
+  await api("/api/personas/" + editing.id, "DELETE"); closeEditor();
+};
+$("editor").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { name: $("ed-name").value.trim(), tagline: $("ed-tag").value.trim(), personality: $("ed-pers").value.trim() };
+  if (!body.name) { $("ed-msg").textContent = tr("need_name"); $("ed-name").focus(); return; }
+  try {
+    const r = editing.id ? await api("/api/personas/" + editing.id, "PUT", body) : await api("/api/personas", "POST", body);
+    if (!editing.id) await api("/api/persona", "POST", { id: r.id });
+    closeEditor(); setMood("happy", 3000);
+  } catch (err) { $("ed-msg").textContent = tr("not_saved") + err.message; }
+});
+
+document.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => setLang(b.dataset.lang));
+$("langbtn").onclick = () => setLang(lang === "ar" ? "en" : "ar");
+applyLang();
+
+(async () => {
+  await refresh();
+  try { (await api("/api/history?conv=" + encodeURIComponent(conv))).forEach((m) => { addMsg(m.role, m.content, m.role === "assistant" && !m.status ? m.id : null); history.push({role: m.role, content: m.content}); }); } catch (e) {}
+})();
+</script>
+</body>
+</html>

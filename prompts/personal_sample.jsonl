@@ -1,0 +1,60 @@
+{"text": "Write a Multiboot header in NASM assembly so GRUB can load my x86 kernel."}
+{"text": "How do I set up the GDT in protected mode for a hobby kernel?"}
+{"text": "My kernel triple faults right after enabling interrupts. How do I debug this in QEMU?"}
+{"text": "Write a C function that prints a string to VGA text mode memory at 0xB8000."}
+{"text": "Explain how the IDT and ISRs work on x86 and write a minimal keyboard interrupt handler."}
+{"text": "How do I implement a simple physical memory allocator with a bitmap in C?"}
+{"text": "What is the difference between paging and segmentation in x86?"}
+{"text": "Write a linker script that places my kernel at 1MB."}
+{"text": "How do I write a Makefile that builds a kernel with gcc cross compiler and links with ld?"}
+{"text": "Explain the boot process from BIOS to my kernel's main function."}
+{"text": "In Unity, how do I make a first-person controller that can pick up and inspect objects?"}
+{"text": "Write a C# script in Unity for a puzzle door that opens when three levers are pulled in order."}
+{"text": "How do I use ScriptableObjects to store dialogue for a narrative game in Unity?"}
+{"text": "My Unity game drops frames when many lights are on. How do I profile and fix it?"}
+{"text": "How should I structure a save system for a 3D puzzle game in Unity?"}
+{"text": "Explain the difference between Update, FixedUpdate and LateUpdate in Unity."}
+{"text": "How do I make a cel-shaded toon shader in Unity URP?"}
+{"text": "Write a state machine in C# for enemy AI with patrol, chase and attack states."}
+{"text": "How do I trigger a cutscene with Timeline when the player enters an area in Unity?"}
+{"text": "What is the best way to handle input with the new Unity Input System?"}
+{"text": "Explain how a CMOS inverter works and draw its voltage transfer curve."}
+{"text": "What is the difference between setup time and hold time in flip-flops?"}
+{"text": "Write Verilog for a 4-bit synchronous counter with reset."}
+{"text": "How does static timing analysis work in VLSI design?"}
+{"text": "Explain the steps of the ASIC design flow from RTL to GDSII."}
+{"text": "What causes clock skew and how is it reduced in chip design?"}
+{"text": "Write a SystemVerilog testbench for a simple ALU."}
+{"text": "What is the difference between FPGA and ASIC and when should I use each?"}
+{"text": "Explain dynamic and static power consumption in CMOS circuits."}
+{"text": "How do I design a finite state machine in Verilog for a traffic light?"}
+{"text": "Solve this RC circuit: R=1k, C=10uF, find the time constant and voltage after 5ms."}
+{"text": "Explain Thevenin and Norton equivalents with an example."}
+{"text": "How does an op-amp non-inverting amplifier work? Derive the gain."}
+{"text": "What is the Laplace transform used for in circuit analysis?"}
+{"text": "Explain the Nyquist sampling theorem and aliasing."}
+{"text": "How do I design a low-pass filter with a cutoff of 1 kHz?"}
+{"text": "What is the difference between a BJT and a MOSFET?"}
+{"text": "Explain how a buck converter steps down voltage."}
+{"text": "How can I detect 2.4 GHz RF signals with a small microcontroller board?"}
+{"text": "Which RF power detector chip would work for a keychain-sized device that finds hidden cameras?"}
+{"text": "How do I read an analog sensor with an ESP32 ADC and filter the noise?"}
+{"text": "Write C code for an STM32 to toggle an LED with a hardware timer interrupt."}
+{"text": "Explain I2C vs SPI vs UART and when to use each."}
+{"text": "How do I design a PCB antenna for 2.4 GHz?"}
+{"text": "How do I reduce power consumption on a battery-powered embedded device?"}
+{"text": "Explain how a mixture-of-experts transformer routes tokens to experts."}
+{"text": "How does quantization to 4-bit work for LLM weights?"}
+{"text": "Write PyTorch code for a simple LoRA layer."}
+{"text": "What is KV cache in transformers and why does it use so much memory?"}
+{"text": "How does llama.cpp run large models on a CPU?"}
+{"text": "Explain rPPG: how can a camera measure heart rate from skin color changes?"}
+{"text": "How would I detect deepfake videos using physiological signals?"}
+{"text": "Implement the Runge-Kutta 4 method in Python for a damped oscillator."}
+{"text": "Explain the finite difference method for solving the heat equation."}
+{"text": "How do I write a clean README and organize my GitHub for an internship application?"}
+{"text": "What should I prepare for a hardware engineering internship interview?"}
+{"text": "Explain cache coherence protocols like MESI."}
+{"text": "How does branch prediction work in modern CPUs?"}
+{"text": "Write a RISC-V assembly program that sums an array."}
+{"text": "Explain pipelining hazards in a 5-stage CPU and how forwarding fixes them."}

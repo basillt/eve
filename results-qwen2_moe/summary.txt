@@ -1,0 +1,14 @@
+model: tests/tiny-qwen2_moe   (4 MoE layers × 16 experts, top-4)
+personal prompts: 60  (train 70%, time split)   generic prompts: 60
+
+target hit |          personal core |           generic core |   oracle | saving vs generic
+-------------------------------------------------------------------------------------------
+       80% |      8/16 (50%) 0.00GB |      8/16 (50%) 0.00GB |      50% | 1.00× fewer experts
+       90% |     11/16 (69%) 0.00GB |     11/16 (69%) 0.00GB |      69% | 1.00× fewer experts
+       95% |     13/16 (81%) 0.00GB |     13/16 (81%) 0.00GB |      81% | 1.00× fewer experts
+       99% |    16/16 (100%) 0.00GB |    16/16 (100%) 0.00GB |     100% | 1.00× fewer experts
+
+full model at 4.5 bits/weight: 0.00 GB (non-expert part always in RAM: 0.00 GB)
+
+with 20% of experts in RAM: personal core hits 42.9%, generic core hits 42.6%  (gap +0.3 points)
+verdict: WEAK: personal and generic cores are close — personalization adds little here.
