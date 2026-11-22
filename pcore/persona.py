@@ -89,7 +89,7 @@ def save_card(folder, card):
 def system_prompt(card, memories=(), passages=()):
     parts = [card["prompt"],
              "Begin every reply with exactly one mood tag from this list, then write your full answer after it: "
-             + " ".join(f"[{e}]" for e in EMOTIONS) + ". Never send the tag alone."]
+             + " ".join(f"[{e}]" for e in EMOTIONS) + ". Never send the tag alone, and never list the tags."]
     if memories:
         parts.append("Things you remember about the user (use only if relevant):\n"
                      + "\n".join(f"- {m}" for m in memories))
@@ -100,6 +100,35 @@ def system_prompt(card, memories=(), passages=()):
                      + "\n".join(f'<file name="{p["name"]}" part="{p["ord"] + 1}">\n{p["text"]}\n</file>'
                                   for p in passages))
     return "\n\n".join(parts)
+
+
+class TagScrubber:
+    """Removes mood tags anywhere in the answer (a model sometimes repeats the whole tag list at the
+    end) and holds back trailing blank space, so nothing like "[neutral]" reaches the user."""
+
+    TAG = None
+
+    def __init__(self):
+        import re
+        if TagScrubber.TAG is None:
+            TagScrubber.TAG = re.compile(r"\[(?:" + "|".join(EMOTIONS) + r")\]", re.IGNORECASE)
+        self.buf = ""
+
+    def feed(self, piece):
+        self.buf = self.TAG.sub("", self.buf + piece)
+        cut = len(self.buf)
+        open_at = self.buf.rfind("[")
+        if open_at != -1 and "]" not in self.buf[open_at:] and len(self.buf) - open_at <= 12:
+            cut = open_at                                 # maybe the start of a tag
+        keep = self.buf[:cut]
+        body = keep.rstrip()
+        out, self.buf = body, keep[len(body):] + self.buf[cut:]
+        return out
+
+    def flush(self):
+        out = self.TAG.sub("", self.buf).rstrip()
+        self.buf = ""
+        return out
 
 
 class ThinkFilter:

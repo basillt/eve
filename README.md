@@ -1,5 +1,7 @@
 <p align="center"><img src="docs/banner.jpg" alt="Eve: an AI assistant that lives on your computer" width="100%"></p>
 
+<p align="center"><a href="https://github.com/basillt/eve/actions/workflows/windows.yml"><img src="https://github.com/basillt/eve/actions/workflows/windows.yml/badge.svg" alt="Windows installer: built and tested"></a></p>
+
 Eve runs entirely on your own machine. After the first start it works offline: no account, no cloud, no API bill.
 Next to the chat sits a brain made of light that thinks and talks with her, grows as she learns about you,
 and sleeps at night while she sorts the day's memories.
@@ -54,7 +56,7 @@ and sleeps at night while she sorts the day's memories.
 ## Quick start
 
 ### Windows: one installer
-1. Download `Eve-Setup-0.1.0.exe` from [Releases](https://github.com/basillt/eve/releases).
+1. Download `Eve-Setup-0.1.0.exe` from the [nightly release](https://github.com/basillt/eve/releases/tag/nightly).
 2. Run it. It needs no admin rights, and it includes its own Python, so there is nothing else to install.
    The installer is not signed yet, so Windows may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 3. Open **Eve** from the desktop or the Start menu.
@@ -102,11 +104,11 @@ This is an early version.
 | Part | Status |
 |---|---|
 | App with llama.cpp | Tested end to end on Linux with the real llama.cpp release (b12600) and a small test model |
-| Windows and NVIDIA | The code is there (CUDA, then Vulkan, then CPU) but **not yet tested on a real Windows machine** |
-| Real Qwen models | Download and selection are written but **not yet tested** in the build environment |
+| NVIDIA graphics cards | The CUDA build is chosen first when an NVIDIA card is found, but **it is not yet tested on a machine with one** |
+| Real Qwen models | Qwen3.5 4B and 0.8B tested on Windows. The 0.8B model, chosen for computers with less than 6 GB of RAM, answers poorly, especially in Arabic |
 | Files (PDF, Word, text) | Done and tested in Arabic and English. A badly made Arabic PDF can come out with letters in the wrong order |
 | Nightly LoRA training | Exists in the research engine (Python), not yet connected to llama.cpp |
-| Windows installer | Built (`installer/`). The contents and the app inside it are checked, but **it is not yet tested on a real Windows machine** |
+| Windows installer | Built and tested on every change on a Windows machine (GitHub Actions, no GPU): it installs, downloads the engine and Qwen3.5 4B, chats in English and Arabic, answers from a file, runs a night, quits and uninstalls. See `windows-test-report.md` in the [nightly release](https://github.com/basillt/eve/releases/tag/nightly) |
 
 ## How it works
 

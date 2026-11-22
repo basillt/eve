@@ -263,27 +263,27 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
 
         def pieces():
             """Yields visible text; returns via StopIteration nothing. Fills `result`."""
-            filt, think = personalib.EmotionFilter(), personalib.ThinkFilter()
+            filt, think, scrub = personalib.EmotionFilter(), personalib.ThinkFilter(), personalib.TagScrubber()
             with gen_lock:
                 for piece in backend.stream(messages, max_tokens, temperature):
-                    out = filt.feed(think.feed(piece))
+                    out = scrub.feed(filt.feed(think.feed(piece)))
                     if out:
                         result["text"] += out
                         yield out
-                tail = filt.feed(think.flush()) + filt.flush()
+                tail = scrub.feed(filt.feed(think.flush()) + filt.flush()) + scrub.flush()
                 if tail:
                     result["text"] += tail
                     yield tail
                 if not result["text"].strip():
                     # small models sometimes stop right after the mood tag: let them go on from it
                     again = messages + [{"role": "assistant", "content": f"[{filt.emotion}] "}]
-                    think = personalib.ThinkFilter()
+                    think, scrub = personalib.ThinkFilter(), personalib.TagScrubber()
                     for piece in backend.stream(again, max_tokens, temperature):
-                        out = think.feed(piece)
+                        out = scrub.feed(think.feed(piece))
                         if out:
                             result["text"] += out
                             yield out
-                    out = think.flush()
+                    out = scrub.feed(think.flush()) + scrub.flush()
                     if out:
                         result["text"] += out
                         yield out
