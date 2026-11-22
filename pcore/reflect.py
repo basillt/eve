@@ -42,21 +42,25 @@ def grounded(fact, words):
 
 
 def parse_list(text):
-    """First JSON array of strings in the model's answer (tolerates code fences and chatter)."""
-    m = re.search(r"\[.*\]", text or "", re.DOTALL)
-    if not m:
-        return []
-    try:
-        items = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return []
-    out = []
-    for it in items if isinstance(items, list) else []:
-        if isinstance(it, str):
-            it = " ".join(it.split())
-            if 3 <= len(it) <= 200 and not SECRET.search(it):
-                out.append(it)
-    return out
+    """The first JSON array of strings in the model's answer. Tolerates a <think> block, code fences
+    and chatter around it, and brackets in the chatter."""
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL)
+    dec = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch != "[":
+            continue
+        try:
+            items, _ = dec.raw_decode(text, i)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(items, list) and all(isinstance(x, str) for x in items):
+            out = []
+            for it in items:
+                it = " ".join(it.split())
+                if 3 <= len(it) <= 200 and not SECRET.search(it):
+                    out.append(it)
+            return out
+    return []
 
 
 def run(complete, db, max_chars=6000, k=6, log=print):
@@ -77,8 +81,11 @@ def run(complete, db, max_chars=6000, k=6, log=print):
         existing = {m["text"].strip().lower() for m in db.memories()}
         from .docs import WORD, norm_word
         words = {norm_word(w) for m in msgs for w in WORD.findall(m["content"])}
-        for fact in parse_list(answer)[:k]:
+        found = parse_list(answer)[:k]
+        log(f"[night] the model suggested: {found}")
+        for fact in found:
             if fact.lower() in existing or NOT_USER.search(fact) or not grounded(fact, words):
+                log(f"[night] dropped: {fact}")
                 continue
             db.remember(fact, source="night")
             existing.add(fact.lower())

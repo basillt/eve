@@ -139,6 +139,8 @@ def night():
         if not st["sleeping"] and st.get("last_report"):
             notes.append(f"Night report: `{json.dumps(st['last_report'].get('learning'), ensure_ascii=False)}`")
             assert not st.get("night_error"), st["night_error"]
+            if not (st["last_report"].get("learning") or {}).get("new_memories"):
+                notes.append("⚠️ the night saved no memories")
             return
         time.sleep(3)
     raise TimeoutError("the night did not finish in 15 minutes")
