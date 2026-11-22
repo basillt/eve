@@ -18,11 +18,12 @@ Rules:
 - Only facts the user clearly stated about themself. No guesses, no facts about the world.
 - Questions and requests are not facts. Nothing about the assistant.
 - Write each fact about the user without "I" or "you", for example: "Studies electrical engineering",
-  "Likes to work early in the morning".
+  "Likes to work early in the morning". Write it in the language of the message it comes from.
 - Never include passwords, codes, card/ID/account numbers, addresses or health details.
-- Each fact is one short sentence in the language the user wrote in.
+- Each fact is one short sentence.
 - At most {k} facts. If nothing is worth keeping, return [].
-- Answer with a JSON array of strings only.
+- Answer with a JSON array only, one object per fact: {{"fact": "...", "quote": "..."}}, where "quote" is
+  copied word for word from the user's message that states it.
 
 Already remembered (do not repeat):
 {known}
@@ -41,9 +42,9 @@ def grounded(fact, words):
     return any(len(n) >= 4 and n in words for n in (norm_word(w) for w in WORD.findall(fact)))
 
 
-def parse_list(text):
-    """The first JSON array of strings in the model's answer. Tolerates a <think> block, code fences
-    and chatter around it, and brackets in the chatter."""
+def parse_facts(text):
+    """[(fact, quote or None)] from the first JSON array in the model's answer. Accepts objects
+    {"fact", "quote"} or plain strings, and tolerates a <think> block, code fences and chatter."""
     text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL)
     dec = json.JSONDecoder()
     for i, ch in enumerate(text):
@@ -53,14 +54,30 @@ def parse_list(text):
             items, _ = dec.raw_decode(text, i)
         except json.JSONDecodeError:
             continue
-        if isinstance(items, list) and all(isinstance(x, str) for x in items):
-            out = []
-            for it in items:
-                it = " ".join(it.split())
-                if 3 <= len(it) <= 200 and not SECRET.search(it):
-                    out.append(it)
-            return out
+        if not isinstance(items, list) or not all(isinstance(x, (str, dict)) for x in items):
+            continue
+        out = []
+        for it in items:
+            fact, quote = (it, None) if isinstance(it, str) else (it.get("fact"), it.get("quote"))
+            if not isinstance(fact, str):
+                continue
+            fact = " ".join(fact.split())
+            if 3 <= len(fact) <= 200 and not SECRET.search(fact):
+                out.append((fact, quote if isinstance(quote, str) else None))
+        return out
     return []
+
+
+def parse_list(text):
+    return [f for f, _ in parse_facts(text)]
+
+
+def quoted(quote, words):
+    """The quote must really come from the user's messages (most of its words, any language)."""
+    from .docs import WORD, norm_word
+    q = [norm_word(w) for w in WORD.findall(quote or "")]
+    q = [w for w in q if len(w) >= 2]
+    return len(q) >= 2 and sum(w in words for w in q) / len(q) >= 0.7
 
 
 def run(complete, db, max_chars=6000, k=6, log=print):
@@ -81,10 +98,11 @@ def run(complete, db, max_chars=6000, k=6, log=print):
         existing = {m["text"].strip().lower() for m in db.memories()}
         from .docs import WORD, norm_word
         words = {norm_word(w) for m in msgs for w in WORD.findall(m["content"])}
-        found = parse_list(answer)[:k]
+        found = parse_facts(answer)[:k]
         log(f"[night] the model suggested: {found}")
-        for fact in found:
-            if fact.lower() in existing or NOT_USER.search(fact) or not grounded(fact, words):
+        for fact, quote in found:
+            real = quoted(quote, words) if quote else grounded(fact, words)
+            if fact.lower() in existing or NOT_USER.search(fact) or not real:
                 log(f"[night] dropped: {fact}")
                 continue
             db.remember(fact, source="night")
