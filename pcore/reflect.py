@@ -15,7 +15,10 @@ for future conversations: things the user stated about themself (name, preferenc
 people in their life, plans, how they like answers).
 
 Rules:
-- Only facts the user clearly stated. No guesses, no facts about the world.
+- Only facts the user clearly stated about themself. No guesses, no facts about the world.
+- Questions and requests are not facts. Nothing about the assistant.
+- Write each fact about the user without "I" or "you", for example: "Studies electrical engineering",
+  "Likes to work early in the morning".
 - Never include passwords, codes, card/ID/account numbers, addresses or health details.
 - Each fact is one short sentence in the language the user wrote in.
 - At most {k} facts. If nothing is worth keeping, return [].
@@ -28,6 +31,14 @@ Today's messages:
 {msgs}"""
 
 SECRET = re.compile(r"\d{6,}|password|كلمة السر|كلمة المرور|סיסמה", re.IGNORECASE)
+# lines in the assistant's voice ("I can help you…", "I am an AI assistant") are not facts about the user
+NOT_USER = re.compile(r"\b(assistant|AI|help you|you|your)\b|مساعد|بساعدك|أساعدك", re.IGNORECASE)
+
+
+def grounded(fact, words):
+    """A fact must share a real word with what the user wrote, so the model cannot invent one."""
+    from .docs import WORD, norm_word
+    return any(len(n) >= 4 and n in words for n in (norm_word(w) for w in WORD.findall(fact)))
 
 
 def parse_list(text):
@@ -64,8 +75,10 @@ def run(complete, db, max_chars=6000, k=6, log=print):
         answer = complete([{"role": "user", "content": PROMPT.format(k=k, known=known, msgs=text)}],
                           max_tokens=500, temperature=0.2)
         existing = {m["text"].strip().lower() for m in db.memories()}
+        from .docs import WORD, norm_word
+        words = {norm_word(w) for m in msgs for w in WORD.findall(m["content"])}
         for fact in parse_list(answer)[:k]:
-            if fact.lower() in existing:
+            if fact.lower() in existing or NOT_USER.search(fact) or not grounded(fact, words):
                 continue
             db.remember(fact, source="night")
             existing.add(fact.lower())

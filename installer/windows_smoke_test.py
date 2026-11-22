@@ -66,7 +66,7 @@ def install():
 @step("start like the desktop shortcut (pythonw)")
 def start():
     subprocess.Popen([os.path.join(INST, "python", "pythonw.exe"), os.path.join(INST, "app", "eve.pyw"),
-                      "--no-browser", "--model", "tiny", "--night-at", "off"], cwd=os.path.join(INST, "app"))
+                      "--no-browser", "--night-at", "off"], cwd=os.path.join(INST, "app"))   # model chosen for this machine, like for users
     for _ in range(120):
         try:
             return api("/api/state", timeout=5)
@@ -97,7 +97,7 @@ def wait_ready():
 
 def chat(text, **extra):
     t = time.time()
-    r = api("/v1/chat/completions", {"messages": [{"role": "user", "content": text}], "max_tokens": 120, **extra})
+    r = api("/v1/chat/completions", {"messages": [{"role": "user", "content": text}], "max_tokens": 200, **extra})
     answer = r["choices"][0]["message"]["content"].strip()
     notes.append(f"**Q:** {text}\n\n**A** ({time.time() - t:.0f}s, mood {r['pcore']['emotion']}"
                  f"{', from ' + ', '.join(s['name'] for s in r['pcore']['sources']) if r['pcore'].get('sources') else ''}):"
@@ -113,7 +113,10 @@ def chat_en():
 
 @step("chat in Arabic")
 def chat_ar():
-    chat("عرّفي عن حالك بجملة وحدة.")
+    r = chat("عرّفي عن حالك بجملة وحدة.")
+    text = r["choices"][0]["message"]["content"]
+    if sum("\u0621" <= ch <= "\u064a" for ch in text) < 10:
+        notes.append("⚠️ the Arabic answer has few Arabic letters")
 
 
 @step("read a file and answer from it")
@@ -123,7 +126,7 @@ def files():
     r = chat("What is the secret code word in my notes?", docs=[doc["id"]])
     assert [s["name"] for s in r["pcore"]["sources"]] == ["notes.txt"], r["pcore"]
     if "PINEAPPLE" not in r["choices"][0]["message"]["content"].upper():
-        notes.append("(the small model did not repeat the code word, but the file was used)")
+        notes.append("⚠️ the model did not repeat the code word, but the file was used")
 
 
 @step("night of learning")

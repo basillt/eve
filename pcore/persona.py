@@ -102,6 +102,38 @@ def system_prompt(card, memories=(), passages=()):
     return "\n\n".join(parts)
 
 
+class ThinkFilter:
+    """Removes a <think>…</think> block (some chat templates send an empty one even with reasoning off)."""
+
+    def __init__(self):
+        self.buf, self.state = "", "start"           # start -> (inside) -> pass
+
+    def feed(self, piece):
+        if self.state == "pass":
+            return piece.replace("<think>", "").replace("</think>", "")
+        self.buf += piece
+        if self.state == "start":
+            s = self.buf.lstrip()
+            if not s or "<think>".startswith(s):
+                return ""                              # might still become <think>
+            if not s.startswith("<think>"):
+                self.state, out = "pass", self.buf
+                self.buf = ""
+                return out.replace("</think>", "")
+            self.state = "inside"
+        end = self.buf.find("</think>")
+        if end == -1:
+            return ""
+        out = self.buf[end + len("</think>"):].lstrip()
+        self.state, self.buf = "pass", ""
+        return out
+
+    def flush(self):
+        out = "" if self.state == "inside" else self.buf
+        self.buf, self.state = "", "pass"
+        return out
+
+
 class EmotionFilter:
     """Strips a leading [mood] tag from a token stream and remembers it."""
 

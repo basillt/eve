@@ -65,9 +65,11 @@ def main():
         print("night ok:", rep["learning"])
 
         # the night with a model that does answer properly
-        fake = lambda msgs, **kw: 'Sure:\n```json\n["The user likes football", "My card is 4111111111111111", "Studies engineering"]\n```'
-        db.add_message("default", "user", "I study engineering")
+        fake = lambda msgs, **kw: ('Sure:\n```json\n["The user likes football", "My card is 4111111111111111", '
+                                   '"Studies engineering", "I can help you with football", "Lives in Paris"]\n```')
+        db.add_message("default", "user", "I study engineering and I like football")
         rep = reflect.run(fake, db, log=lambda *a: None)
+        # kept: what the user said; dropped: a card number, the assistant's voice, an invented fact
         assert rep["learning"]["new_memories"] == ["The user likes football", "Studies engineering"], rep
         assert not any("4111" in m["text"] for m in db.memories())
         rep = reflect.run(fake, db, log=lambda *a: None)
