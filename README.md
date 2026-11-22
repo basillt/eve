@@ -53,6 +53,19 @@ and sleeps at night while she sorts the day's memories.
 
 ## Quick start
 
+### Windows: one installer
+1. Download `Eve-Setup-0.1.0.exe` from [Releases](https://github.com/basillt/eve/releases).
+2. Run it. It needs no admin rights, and it includes its own Python, so there is nothing else to install.
+   The installer is not signed yet, so Windows may say "Windows protected your PC". Click **More info**, then **Run anyway**.
+3. Open **Eve** from the desktop or the Start menu.
+
+The first time, Eve opens in your browser with a setup screen that shows each step and the download progress. After that it starts in a few seconds.
+
+Eve keeps running in the background after you close the browser, so it can learn at night. Clicking the icon again opens the same Eve. To stop it, go to **Settings** and choose **Quit Eve**.
+
+Uninstall it from Windows Settings, under Apps. The uninstaller asks whether to keep your chats, memory and the downloaded model.
+
+### From source (Windows, macOS, Linux)
 ```
 pip install -r requirements-app.txt
 python -m pcore.app            (Windows: run_app.bat)
@@ -93,13 +106,14 @@ This is an early version.
 | Real Qwen models | Download and selection are written but **not yet tested** in the build environment |
 | Files (PDF, Word, text) | Done and tested in Arabic and English. A badly made Arabic PDF can come out with letters in the wrong order |
 | Nightly LoRA training | Exists in the research engine (Python), not yet connected to llama.cpp |
-| One-click installer | Not yet. This is the next step |
+| Windows installer | Built (`installer/`). The contents and the app inside it are checked, but **it is not yet tested on a real Windows machine** |
 
 ## How it works
 
 | File | What it does |
 |---|---|
-| `pcore/app.py` | The app: checks the machine, downloads the engine and model, starts everything, opens the browser |
+| `pcore/app.py` | The app: opens the browser at once with a setup screen, downloads the engine and model, starts everything; one instance at a time |
+| `installer/` | The Windows installer: NSIS script, icon, launcher, and the build script |
 | `pcore/llama.py` | Starts llama-server and talks to it |
 | `pcore/runtime.py` | Model list, model choice by hardware, resumable downloads |
 | `pcore/hardware.py` | Detects RAM, graphics card and OS |
@@ -177,8 +191,17 @@ python tests/test_night.py tests/store
 python tests/test_server.py tests/store
 python tests/test_files.py
 python tests/test_llama.py path/to/llama-server path/to/model.gguf
+python tests/test_app.py path/to/llama-server path/to/model.gguf
 ```
 The tiny test model is random. It only checks that the code runs.
+
+### Building the Windows installer
+Works from Linux, macOS or Windows, and needs NSIS 3 (`apt install nsis`):
+```
+python installer/build_windows.py --version 0.1.0
+```
+It downloads a private Python for Windows (python-build-standalone, checked by SHA-256), installs the app's packages as Windows wheels, adds Eve, and writes `dist/Eve-Setup-0.1.0.exe`.
+The installer puts Eve in `%LOCALAPPDATA%\Programs\Eve`, and your data stays in `%LOCALAPPDATA%\Eve`.
 
 ## License
 

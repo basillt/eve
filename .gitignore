@@ -13,3 +13,6 @@ tests/tiny-*/
 tests/store/
 tools/out/
 web/_brain_test.html
+installer/build/
+installer/cache/
+dist/

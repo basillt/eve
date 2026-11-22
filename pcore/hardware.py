@@ -54,7 +54,8 @@ def nvidia_gpus():
         return []
     try:
         out = subprocess.run([exe, "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader,nounits"],
-                             capture_output=True, text=True, timeout=10).stdout
+                             capture_output=True, text=True, timeout=10,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout   # no console flash on Windows
     except Exception:
         return []
     gpus = []
