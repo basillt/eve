@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/web/vendor/three.module.min.js"}}</script>
+<style>
+html,body{margin:0;width:1280px;height:640px;overflow:hidden;background:#05060d}
+body{font-family:"Inter","Segoe UI",system-ui,sans-serif;color:#fff}
+#bg{position:absolute;inset:0;background:radial-gradient(45% 70% at 74% 50%,#2a1460 0%,#0d0b26 55%,#05060d 100%)}
+#bg::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(25,227,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(25,227,255,.05) 1px,transparent 1px);background-size:40px 40px}
+#bg::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(rgba(255,255,255,.02) 0 1px,transparent 1px 3px)}
+.br{position:absolute;width:44px;height:44px;border:0 solid}
+.a{top:26px;left:26px;border-top-width:4px;border-left-width:4px;border-color:#19e3ff}
+.b{top:26px;right:26px;border-top-width:4px;border-right-width:4px;border-color:#ff2bd6}
+.c{bottom:26px;left:26px;border-bottom-width:4px;border-left-width:4px;border-color:#ff2bd6}
+.d{bottom:26px;right:26px;border-bottom-width:4px;border-right-width:4px;border-color:#19e3ff}
+#b{position:absolute;right:-10px;top:0;width:700px;height:640px}
+.txt{position:absolute;left:96px;top:150px;width:600px}
+h1{margin:0;font-size:150px;line-height:1;font-weight:800;letter-spacing:-.01em;text-shadow:0 0 40px rgba(25,227,255,.8),0 0 110px rgba(25,227,255,.3)}
+p{margin:22px 0 0;font-size:36px;line-height:1.3;font-weight:600}
+.pills{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+.pills span{font-size:21px;padding:8px 16px;border:1.5px solid rgba(25,227,255,.45);background:rgba(25,227,255,.08);color:#cfefff;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.pills span.m{border-color:rgba(255,43,214,.5);background:rgba(255,43,214,.10);color:#ffd6f6}
+</style></head><body>
+<div id="bg"><div class="br a"></div><div class="br b"></div><div class="br c"></div><div class="br d"></div></div>
+<canvas id="b"></canvas>
+<div class="txt"><h1>Eve</h1><p>An AI assistant that lives on your computer</p>
+<div class="pills"><span>Runs offline</span><span>Remembers you</span><span class="m">Learns every night</span><span>Reads your files</span><span class="m">Arabic + English</span></div></div>
+<script type="module">
+import { createBrain } from "/web/brain.js";
+const b = createBrain(document.getElementById("b"), {autoplay: false});
+b.setGrowth(1, true);
+b.setMood("confused"); b.advance(10);          // turn it to a side view (this mood spins the other way)
+b.setMood("neutral"); b.advance(2);
+window.ready = true;
+</script></body></html>

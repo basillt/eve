@@ -1,16 +1,15 @@
-# Eve — an AI assistant that lives on your computer
+<p align="center"><img src="docs/banner.jpg" alt="Eve: an AI assistant that lives on your computer" width="100%"></p>
 
 Eve runs entirely on your own machine. After the first start it works offline: no account, no cloud, no API bill.
 Next to the chat sits a brain made of light that thinks and talks with her, grows as she learns about you,
 and sleeps at night while she sorts the day's memories.
 
-<p align="center">
-  <img src="docs/brain-day-1.jpg" width="49%" alt="Eve on day one: a sparse brain">
-  <img src="docs/brain-day-41.jpg" width="49%" alt="Eve after 41 days: a dense, glowing brain">
-</p>
-<p align="center"><sub>Day 1 and day 41. Every memory, night and file adds neurons.</sub></p>
+<table>
+<tr>
+<td width="36%" align="center"><img src="docs/eve-demo.gif" width="100%" alt="15-second demo: the brain grows from day 1 to day 60, thinks, and answers from a file"></td>
+<td>
 
-## What it does
+### What it does
 
 - **Runs locally.** It picks a model that fits your RAM and graphics card, downloads it once, and runs it with llama.cpp.
 - **Remembers.** It keeps notes about you in a local SQLite file. You can read and delete every one of them.
@@ -18,13 +17,38 @@ and sleeps at night while she sorts the day's memories.
 - **Reads your files.** It can read PDF, Word (.docx) and text files and answer from them, showing which file it used. The files stay on your computer.
 - **Has a brain that grows.** It starts as a sparse outline and gains neurons with every memory, night, day and file. The brain also reacts to what Eve is doing: it shows thinking, talking, happy, sad, confused, surprised and sleeping.
 - **Makes a shareable morning card.** After a night of learning, Eve makes an image you can share. Nothing it learned about you appears on the image unless you tick it.
-- **Speaks Arabic and English.** The interface switches with one button, and Arabic search understands spelling variants.
-- **Has characters with rights.** You can make your own character, which is a name and a way of talking. Every character card must say who holds its rights, and a card without rights is not loaded.
+- **Speaks Arabic and English.** The interface switches with one button.
+- **Has characters with rights.** You can make your own character, which is a name and a way of talking. Every character card must say who holds its rights.
+
+</td>
+</tr>
+</table>
+
+## It grows with you
 
 <p align="center">
-  <img src="docs/chat-with-file.jpg" width="70%" alt="Asking about an attached Word file; the answer names the file">
-  <img src="docs/morning-card.jpg" width="25%" alt="The shareable morning card">
+  <img src="docs/brain-day-1.jpg" width="49%" alt="Eve on day one: a sparse brain">
+  <img src="docs/brain-day-41.jpg" width="49%" alt="Eve after 41 days: a dense, glowing brain">
 </p>
+<p align="center"><sub>Day 1 and day 41. Every memory, night and file adds neurons, and each new one is born with a flash.</sub></p>
+
+## A look inside
+
+<table>
+<tr>
+<td width="50%"><img src="docs/chat-with-file.jpg" alt="Chat: asking about an attached Word file, and the answer names the file"><br><sub><b>Chat with your files.</b> Attach a file and the answer shows where it came from.</sub></td>
+<td width="50%"><img src="docs/files.jpg" alt="The Files tab with two files"><br><sub><b>Files.</b> PDF, Word and text, searched on your machine.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/memory.jpg" alt="The Memory tab: everything Eve remembers, each line with a Delete button"><br><sub><b>Memory.</b> Everything Eve remembers about you, and you can delete any line.</sub></td>
+<td><img src="docs/brain-tab.jpg" alt="The Brain tab: engine, model, graphics card, brain age and nightly learning"><br><sub><b>Brain.</b> Which engine and model run on your machine, and what Eve learned last night.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/characters.jpg" alt="The Characters tab with Eve and a user-made character"><br><sub><b>Characters.</b> Make your own. Every card says who holds its rights.</sub></td>
+<td align="center"><img src="docs/morning-card.jpg" width="62%" alt="The shareable morning card"><br><sub><b>Morning card.</b> Share what Eve learned, but only the lines you pick.</sub></td>
+</tr>
+</table>
+
 <p align="center"><sub>Screenshots taken with a demo backend that gives scripted replies.</sub></p>
 
 ## Quick start
@@ -120,7 +144,7 @@ The types are:
 - `public_domain`
 
 ### Launch video
-`tools/promo.html` and `tools/promo_capture.py` render a 15-second vertical video at 1080×1920 and 30 fps, in Arabic or English. In it the brain grows from day 1 to day 60, thinks, answers from a file, and ends on the logo. Every frame is drawn by `brain.js`, so the output is the same every time.
+`tools/promo.html` and `tools/promo_capture.py` render a 15-second vertical video at 1080×1920 and 30 fps, in Arabic or English. In it the brain grows from day 1 to day 60, thinks, answers from a file, and ends on the logo. Every frame is drawn by `brain.js`, so the output is the same every time. The banner at the top of this page is `tools/banner.html`.
 
 ## Research engine and experiments
 
