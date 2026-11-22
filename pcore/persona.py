@@ -88,8 +88,8 @@ def save_card(folder, card):
 
 def system_prompt(card, memories=(), passages=()):
     parts = [card["prompt"],
-             "Begin every reply with exactly one mood tag from this list, then your answer: "
-             + " ".join(f"[{e}]" for e in EMOTIONS) + "."]
+             "Begin every reply with exactly one mood tag from this list, then write your full answer after it: "
+             + " ".join(f"[{e}]" for e in EMOTIONS) + ". Never send the tag alone."]
     if memories:
         parts.append("Things you remember about the user (use only if relevant):\n"
                      + "\n".join(f"- {m}" for m in memories))
