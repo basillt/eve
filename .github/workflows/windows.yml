@@ -10,43 +10,63 @@ permissions:
   contents: write
 
 jobs:
-  build-and-test:
+  build:
+    # Ubuntu's NSIS has the 64-bit installer stubs; the Windows NSIS download does not.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+      - run: python installer/build_windows.py --version 0.1.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist/Eve-Setup-0.1.0.exe
+
+  test-on-windows:
+    needs: build
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Install NSIS
-        shell: pwsh
-        run: |
-          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) { choco install nsis -y --no-progress }
-          $nsis = "${env:ProgramFiles(x86)}\NSIS"
-          if (Test-Path $nsis) { Add-Content $env:GITHUB_PATH $nsis }
-
-      - name: Build the installer
-        run: python installer/build_windows.py --version 0.1.0
-
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: dist
       - name: Install, use and uninstall Eve
         env:
           PYTHONIOENCODING: utf-8
         run: python installer/windows_smoke_test.py dist/Eve-Setup-0.1.0.exe report
-
-      - name: Publish the nightly build and the test report
+      - uses: actions/upload-artifact@v4
         if: always()
-        shell: pwsh
+        with:
+          name: report
+          path: report
+
+  publish:
+    needs: [build, test-on-windows]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish the nightly build and the test report
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git tag -f nightly
           git push -f origin nightly
-          $files = @("report/windows-test-report.md")
-          foreach ($f in @("dist/Eve-Setup-0.1.0.exe", "report/eve-on-windows.png", "report/app.log", "report/llama-server.log")) { if (Test-Path $f) { $files += $f } }
-          gh release view nightly *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create nightly --prerelease --title "Nightly build" --notes "Built and tested on Windows by GitHub Actions on every change. See windows-test-report.md."
-          }
+          files="out/installer/Eve-Setup-0.1.0.exe"
+          for f in out/report/windows-test-report.md out/report/eve-on-windows.png out/report/app.log out/report/llama-server.log; do
+            [ -f "$f" ] && files="$files $f"
+          done
+          gh release view nightly >/dev/null 2>&1 || gh release create nightly --prerelease --title "Nightly build" \
+            --notes "Built on every change and tested on Windows by GitHub Actions. See windows-test-report.md."
           gh release upload nightly $files --clobber
