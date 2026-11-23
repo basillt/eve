@@ -2,6 +2,11 @@
 
 <p align="center"><a href="https://github.com/basillt/eve/actions/workflows/windows.yml"><img src="https://github.com/basillt/eve/actions/workflows/windows.yml/badge.svg" alt="Windows installer: built and tested"></a></p>
 
+<p align="center">
+  <a href="https://github.com/basillt/eve/releases/download/nightly/Eve-Setup-0.1.0.exe"><b>⬇️ Download Eve for Windows</b></a>
+  &nbsp;·&nbsp; one installer, no admin rights &nbsp;·&nbsp; ~12 MB
+</p>
+
 Eve runs entirely on your own machine. After the first start it works offline: no account, no cloud, no API bill.
 Next to the chat sits a brain made of light that thinks and talks with her, grows as she learns about you,
 and sleeps at night while she sorts the day's memories.
