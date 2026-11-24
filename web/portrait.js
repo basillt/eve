@@ -1,27 +1,57 @@
 /*
- * portrait.js — a character's face as a cloud of glowing light in 3D, in the spirit of the brain.
+ * portrait.js — a character's face as a 3-D constellation of light: points wired together.
  *
  * A face file (web/faces/<id>.json) is built by tools/make_face.py from a reference image:
  *   { aspect, grid:[w,h], palette:[[r,g,b],…], points:[[x,y,colorIndex,brightness],…] }
- * Each 2-D point is lifted into 3-D: the face gets a rounded relief (centre bulges toward you,
- * the edges fall away, and bright features — nose, cheekbones — stand a little more forward), so
- * the portrait is a glowing bust of light you can see depth in and turn. Every dot keeps its own
- * colour and glows additively. It reacts to mood (liveliness, sparks, dim at "sleeping") and
- * exposes the same API as the brain (setMood / setTalking / pulse / setGrowth / setMature /
- * advance / snapshot / stats / dispose), so the app can show either interchangeably.
+ * Each 2-D point is lifted into 3-D on a rounded relief (centre bulges toward you, the edges fall
+ * away, bright features — nose, cheekbones — stand a little more forward), then every point is
+ * wired to its nearest neighbours, exactly like the brain. The result is a glowing mesh in the
+ * shape of the face that you can see depth in and turn; sparks run along the wires and light the
+ * points they pass. Every point keeps its own colour and glows additively. It reacts to mood
+ * (liveliness, dim at "sleeping") and exposes the same API as the brain (setMood / setTalking /
+ * pulse / setGrowth / setMature / advance / snapshot / stats / dispose), so the app can show
+ * either interchangeably.
  *
  *   const p = createPortrait(canvas, data)    // null if WebGL is not available
  */
 import * as THREE from "three";
 
+function wire(pts, k, maxd2) {                        // k nearest neighbours within a distance
+  const n = pts.length, edges = [], adj = Array.from({ length: n }, () => []);
+  const seen = new Set();
+  const best = new Float32Array(k), idx = new Int32Array(k);
+  for (let i = 0; i < n; i++) {
+    best.fill(Infinity); idx.fill(-1);
+    const [xi, yi, zi] = pts[i];
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const dx = pts[j][0] - xi, dy = pts[j][1] - yi, dz = pts[j][2] - zi;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < best[k - 1]) {
+        let p = k - 1;
+        while (p > 0 && best[p - 1] > d) { best[p] = best[p - 1]; idx[p] = idx[p - 1]; p--; }
+        best[p] = d; idx[p] = j;
+      }
+    }
+    for (let m = 0; m < k; m++) {
+      const j = idx[m];
+      if (j < 0 || best[m] > maxd2) continue;
+      const key = i < j ? i * n + j : j * n + i;
+      if (seen.has(key)) continue;
+      seen.add(key); edges.push(i, j); adj[i].push(j); adj[j].push(i);
+    }
+  }
+  return { edges, adj };
+}
+
 const MOODS = {           // mood changes liveliness, not the picture's colours
-  neutral:   { rate: 10, twinkle: 0.12, speed: 1.0, sway: 0.55 },
-  thinking:  { rate: 46, twinkle: 0.26, speed: 1.6, sway: 0.42 },
-  happy:     { rate: 30, twinkle: 0.22, speed: 1.4, sway: 0.70 },
-  sad:       { rate: 5,  twinkle: 0.07, speed: 0.7, sway: 0.30 },
-  confused:  { rate: 22, twinkle: 0.18, speed: 1.1, sway: 0.60 },
-  surprised: { rate: 60, twinkle: 0.30, speed: 1.8, sway: 0.85 },
-  sleeping:  { rate: 3,  twinkle: 0.05, speed: 0.6, sway: 0.20 },
+  neutral:   { rate: 6,  twinkle: 0.10, speed: 1.0, sway: 0.55 },
+  thinking:  { rate: 20, twinkle: 0.20, speed: 1.6, sway: 0.42 },
+  happy:     { rate: 15, twinkle: 0.16, speed: 1.4, sway: 0.70 },
+  sad:       { rate: 3,  twinkle: 0.06, speed: 0.7, sway: 0.30 },
+  confused:  { rate: 12, twinkle: 0.15, speed: 1.1, sway: 0.60 },
+  surprised: { rate: 28, twinkle: 0.24, speed: 1.8, sway: 0.85 },
+  sleeping:  { rate: 2,  twinkle: 0.05, speed: 0.6, sway: 0.20 },
 };
 
 const VS = `
@@ -97,7 +127,6 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
   const bright = new Float32Array(n);
   const seeds = new Float32Array(n);
   const act = new Float32Array(n);
-  const plane = new Float32Array(n * 2);             // keep (x,y) for spark spawns
   const palette = (data.palette || [[255, 245, 215]]);
   let sd = seed >>> 0;
   const rnd = () => ((sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -113,12 +142,28 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
     const b = p[3] ?? 1;
     const z = dome * DOME + (b - mb) * RELIEF;
     pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
-    plane[i * 2] = x; plane[i * 2 + 1] = y;
     const c = palette[p[2] | 0] || palette[0];
     col[i * 3] = c[0] / 255; col[i * 3 + 1] = c[1] / 255; col[i * 3 + 2] = c[2] / 255;
     bright[i] = b; seeds[i] = rnd();
   }
 
+  // ---- wire the points to their nearest neighbours (a constellation) --------
+  const pts3 = []; for (let i = 0; i < n; i++) pts3.push([pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]);
+  const cellW = 2 * HWx / ((data.grid && data.grid[0]) || 90);
+  const { edges: rawEdges, adj } = wire(pts3, 6, (cellW * 1.9) * (cellW * 1.9));
+  // order the points (even sample) so growth can reveal a prefix; sort wires by their newest end
+  const order = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
+  const orderPos = new Int32Array(n); order.forEach((p, k) => (orderPos[p] = k));
+  const ne = rawEdges.length / 2;
+  const eord = Array.from({ length: ne }, (_, e) => e);
+  const newest = (e) => Math.max(orderPos[rawEdges[2 * e]], orderPos[rawEdges[2 * e + 1]]);
+  eord.sort((a, b) => newest(a) - newest(b));
+  const edges = new Int32Array(ne * 2), edgeTop = new Int32Array(ne);
+  eord.forEach((e, k) => { edges[2 * k] = rawEdges[2 * e]; edges[2 * k + 1] = rawEdges[2 * e + 1]; edgeTop[k] = newest(e); });
+  const wiresBelow = (N) => { let lo = 0, hi = ne; while (lo < hi) { const m = (lo + hi) >> 1; if (edgeTop[m] < N) lo = m + 1; else hi = m; } return lo; };
+
+  // points
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   g.setAttribute("acolor", new THREE.BufferAttribute(col, 3));
@@ -126,49 +171,68 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
   g.setAttribute("seed", new THREE.BufferAttribute(seeds, 1));
   const actAttr = new THREE.BufferAttribute(act, 1); actAttr.setUsage(THREE.DynamicDrawUsage);
   g.setAttribute("act", actAttr);
-  // first N points are an even sample (shuffled order) -> growth can reveal a share of them
-  const order = Array.from({ length: n }, (_, i) => i);
-  for (let i = n - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
-  const idx = new Uint32Array(order);
-  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.setIndex(new THREE.BufferAttribute(new Uint32Array(order), 1));
 
   const uniforms = {
-    uSize: { value: 30 }, uTime: { value: 0 }, uTwinkle: { value: MOODS.neutral.twinkle },
+    uSize: { value: 18 }, uTime: { value: 0 }, uTwinkle: { value: MOODS.neutral.twinkle },
     uHot: { value: new THREE.Color("#fff3d2") }, uDim: { value: 1 },
   };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: VS, fragmentShader: FS,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   group.add(new THREE.Points(g, mat));
 
-  // ---- sparks: motes that drift off the face when it is lively --------------
-  const MAX = 160;
+  // wires: colour follows each end's own colour, brightening where a spark passes
+  const wpos = new Float32Array(ne * 6), wcol = new Float32Array(ne * 6);
+  for (let e = 0; e < ne; e++) {
+    const a = edges[2 * e], b = edges[2 * e + 1];
+    wpos.set(pts3[a], e * 6); wpos.set(pts3[b], e * 6 + 3);
+  }
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute("position", new THREE.BufferAttribute(wpos, 3));
+  const wcolAttr = new THREE.BufferAttribute(wcol, 3); wcolAttr.setUsage(THREE.DynamicDrawUsage);
+  wg.setAttribute("color", wcolAttr);
+  const wm = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85,
+    depthWrite: false, blending: THREE.AdditiveBlending });
+  group.add(new THREE.LineSegments(wg, wm));
+
+  // ---- sparks travelling along the wires ------------------------------------
+  const MAX = 420;
   const spos = new Float32Array(MAX * 3), slife = new Float32Array(MAX);
   const sg = new THREE.BufferGeometry();
   const sposAttr = new THREE.BufferAttribute(spos, 3); sposAttr.setUsage(THREE.DynamicDrawUsage);
   const slifeAttr = new THREE.BufferAttribute(slife, 1); slifeAttr.setUsage(THREE.DynamicDrawUsage);
   sg.setAttribute("position", sposAttr); sg.setAttribute("alife", slifeAttr);
   sg.setDrawRange(0, 0);
-  const sm = new THREE.ShaderMaterial({ uniforms: { uSize: { value: 40 }, uHot: uniforms.uHot, uDim: uniforms.uDim, uTime: uniforms.uTime },
+  const sm = new THREE.ShaderMaterial({ uniforms: { uSize: { value: 26 }, uHot: uniforms.uHot, uDim: uniforms.uDim, uTime: uniforms.uTime },
     vertexShader: SPARK_VS, fragmentShader: SPARK_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   group.add(new THREE.Points(sg, sm));
   const sparks = [];
-  const newSpark = () => {
-    const i = (rnd() * n) | 0;
-    sparks.push({ x: plane[i * 2], y: plane[i * 2 + 1], z: pos[i * 3 + 2],
-      vx: (rnd() - 0.5) * 0.5, vy: (rnd() - 0.5) * 0.5, vz: 0.1 + rnd() * 0.5, life: 1 });
-  };
 
   // ---- state ----------------------------------------------------------------
   let mood = "neutral", cur = MOODS.neutral, talking = false;
-  let growth = 1, time = 0, budget = 0;
+  let growth = 1, time = 0, budget = 0, talkBudget = 0, alive_n = n, alive_e = ne;
   const target = { twinkle: cur.twinkle };
+  const liveNb = (i) => adj[i].filter((j) => orderPos[j] < alive_n);
+  const spawn = (hops) => {
+    if (sparks.length >= MAX) return;
+    let a = -1;
+    for (let t = 0; t < 30; t++) { const i = order[(rnd() * alive_n) | 0]; if (adj[i].length) { a = i; break; } }
+    if (a < 0) return;
+    const nb = liveNb(a); if (!nb.length) return;
+    const b = nb[(rnd() * nb.length) | 0];
+    act[a] = Math.min(1, act[a] + 0.6);
+    sparks.push({ a, b, t: 0, hops: hops ?? (4 + ((rnd() * 10) | 0)) });
+  };
   const setMood = (m) => { cur = MOODS[m] || MOODS.neutral; mood = MOODS[m] ? m : "neutral"; target.twinkle = reduced ? 0 : cur.twinkle;
-    if (mood === "surprised") for (let i = 0; i < 30; i++) { if (sparks.length < MAX) newSpark(); } };
+    if (mood === "surprised") for (let i = 0; i < 60; i++) spawn(3 + ((rnd() * 5) | 0)); };
   const setTalking = (on) => { talking = !!on; };
   const setMature = () => {};                                   // "complete" is Eve's brain, not a character face
-  const setGrowth = (gval) => { growth = Math.max(0.12, Math.min(1, +gval || 0)); g.setDrawRange(0, Math.max(30, Math.round(n * growth))); };
-  const flash = (k) => { for (let i = 0; i < k; i++) act[order[(rnd() * Math.round(n * growth)) | 0]] = 1; };
-  const pulse = () => { flash(14); for (let i = 0; i < 5; i++) if (sparks.length < MAX) newSpark(); };
+  const setGrowth = (gval) => {
+    growth = Math.max(0.12, Math.min(1, +gval || 0));
+    alive_n = Math.max(30, Math.round(n * growth)); alive_e = wiresBelow(alive_n);
+    g.setDrawRange(0, alive_n); wg.setDrawRange(0, alive_e * 2);
+  };
+  const pulse = () => { for (let i = 0; i < 5; i++) spawn(3 + ((rnd() * 6) | 0)); };
 
   // ---- fit + drag to turn ---------------------------------------------------
   const resize = () => {
@@ -183,7 +247,7 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
     camera.position.z = need * 1.16 + 0.6;
     camera.updateProjectionMatrix();
     const k = Math.min(1.5, Math.max(0.5, h / 650));
-    uniforms.uSize.value = 30 * k; sm.uniforms.uSize.value = 40 * k;
+    uniforms.uSize.value = 18 * k; sm.uniforms.uSize.value = 26 * k;
   };
   const ro = new ResizeObserver(resize); ro.observe(canvas.parentElement || canvas); resize();
 
@@ -204,24 +268,49 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
     uniforms.uTwinkle.value += (target.twinkle - uniforms.uTwinkle.value) * (1 - Math.exp(-step * 3));
     uniforms.uDim.value += (((mood === "sleeping") ? 0.55 : 1) - uniforms.uDim.value) * (1 - Math.exp(-step * 2));
 
-    // flashes roam across the face; talking makes it busier
-    budget += step * (reduced ? 0 : cur.rate * (talking ? 2 : 1));
-    while (budget >= 1) { flash(1); if (sparks.length < MAX && rnd() < 0.5) newSpark(); budget -= 1; }
-    const decay = Math.exp(-step * 3.0);
-    const live = Math.round(n * growth);
-    for (let i = 0; i < live; i++) act[order[i]] *= decay;
-    actAttr.needsUpdate = true;
+    // new sparks: a steady flicker across the mesh, busier while talking
+    budget += step * (reduced ? cur.rate * 0.4 : cur.rate);
+    while (budget >= 1) { spawn(); budget -= 1; }
+    if (talking) { talkBudget += step * 20; while (talkBudget >= 1) { spawn(2 + ((rnd() * 4) | 0)); talkBudget -= 1; } }
 
-    // move sparks
+    // move sparks hop by hop along the wires, lighting the points they reach
     let w = 0;
     for (let s = sparks.length - 1; s >= 0; s--) {
       const sp = sparks[s];
-      sp.life -= step * 1.0;
-      if (sp.life <= 0) { sparks.splice(s, 1); continue; }
-      sp.x += sp.vx * step * cur.speed; sp.y += sp.vy * step * cur.speed; sp.z += sp.vz * step * cur.speed;
+      sp.t += step * cur.speed * (0.7 + 0.6 * ((sp.a * 13) % 7) / 7);
+      while (sp.t >= 1) {
+        sp.t -= 1;
+        act[sp.b] = Math.min(1, act[sp.b] + 0.6);
+        if (--sp.hops <= 0) { sparks.splice(s, 1); break; }
+        const nb = liveNb(sp.b);
+        if (!nb.length) { sparks.splice(s, 1); break; }
+        let next = nb[(rnd() * nb.length) | 0];
+        if (next === sp.a && nb.length > 1) next = nb[(nb.indexOf(next) + 1) % nb.length];
+        sp.a = sp.b; sp.b = next;
+      }
     }
-    for (const sp of sparks) { spos[w * 3] = sp.x; spos[w * 3 + 1] = sp.y; spos[w * 3 + 2] = sp.z; slife[w] = Math.max(0, sp.life); w++; }
-    sg.setDrawRange(0, sparks.length); sposAttr.needsUpdate = true; slifeAttr.needsUpdate = true;
+    for (const sp of sparks) {
+      const a = pts3[sp.a], b = pts3[sp.b], t = sp.t;
+      spos[w * 3] = a[0] + (b[0] - a[0]) * t; spos[w * 3 + 1] = a[1] + (b[1] - a[1]) * t; spos[w * 3 + 2] = a[2] + (b[2] - a[2]) * t;
+      slife[w] = 1; w++;
+    }
+    sg.setDrawRange(0, w); sposAttr.needsUpdate = true; slifeAttr.needsUpdate = true;
+
+    // decay the point activity, then colour the wires from their ends
+    const decay = Math.exp(-step * 3.0);
+    for (let i = 0; i < alive_n; i++) act[order[i]] *= decay;
+    actAttr.needsUpdate = true;
+    const dim = uniforms.uDim.value, hot = uniforms.uHot.value;
+    for (let e = 0; e < alive_e; e++) {
+      for (let kk = 0; kk < 2; kk++) {
+        const vi = edges[2 * e + kk], a = Math.min(1, act[vi]), o = e * 6 + kk * 3;
+        const base = 0.36 * dim, h = 0.85 * a * dim;
+        wcol[o] = col[vi * 3] * base + hot.r * h;
+        wcol[o + 1] = col[vi * 3 + 1] * base + hot.g * h;
+        wcol[o + 2] = col[vi * 3 + 2] * base + hot.b * h;
+      }
+    }
+    wcolAttr.needsUpdate = true;
 
     // motion: a gentle 3-D sway reveals the depth; the user can drag to turn fully
     const sway = reduced ? 0 : cur.sway;
@@ -253,7 +342,7 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
       alive = false; cancelAnimationFrame(raf); ro.disconnect();
       canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up); canvas.removeEventListener("pointercancel", up);
-      g.dispose(); sg.dispose(); mat.dispose(); sm.dispose(); renderer.dispose();
+      g.dispose(); wg.dispose(); sg.dispose(); mat.dispose(); wm.dispose(); sm.dispose(); renderer.dispose();
     },
   };
 }
