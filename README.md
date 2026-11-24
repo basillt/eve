@@ -169,7 +169,7 @@ In the Characters tab, press "Create a new character" and give it a name, a shor
 
 More will be added over time. Every ready-made character carries a `rights` block, so the rule "no character without rights" holds for the pack too — historical figures are `public_domain`.
 
-A character can bring **its own face** instead of the brain: a card with `"face": "alexander"` shows `web/faces/alexander.json` — a portrait drawn as a cloud of glowing points that reacts to mood, just like the brain. Faces are built from a reference with `tools/make_face.py`.
+A character can bring **its own face** instead of the brain: a card with `"face": "alexander"` shows `web/faces/alexander.json` — the portrait rebuilt as a mosaic of glowing, multi-coloured light-dots that reacts to mood, in the same light aesthetic as the brain. Build one from a reference image with `tools/make_face.py <image> <id>`.
 
 You can also drop your own JSON file in `personas/` (see `eve.json`). It must include:
 ```json
