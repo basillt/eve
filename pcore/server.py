@@ -27,7 +27,7 @@ from . import runtime as runtimelib
 from .db import DB
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PERSONA_FIELDS = ("id", "name", "name_en", "tagline", "tagline_en", "art", "face", "rights", "avatar", "personality", "created_by")
+PERSONA_FIELDS = ("id", "name", "name_en", "tagline", "tagline_en", "art", "face", "rights", "avatar", "personality", "created_by", "kind")
 
 
 # ---------------------------------------------------------------- backends
