@@ -110,6 +110,9 @@ ul.plain li span{overflow-wrap:anywhere}
 
 /* the brain: the default face of the assistant */
 #brain3d{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:1;cursor:grab}
+#face2d{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:1}
+.isface #brain3d{display:none}
+.isbrain.isface #face2d{display:block}
 #brain3d:active{cursor:grabbing}
 .isbrain #brain3d{display:block}
 .isbrain .stage{background:radial-gradient(120% 90% at 50% 42%,#24316b 0%,#141c44 55%,#0d1331 100%)}
@@ -329,6 +332,7 @@ ul.plain li{border-bottom:1px solid var(--line)}
     </div>
 
     <canvas id="brain3d" aria-hidden="true" data-i-title="brain_drag"></canvas>
+    <canvas id="face2d" aria-hidden="true"></canvas>
     <div class="status" id="status" aria-live="polite"></div>
     <div class="who"><h1 id="p-name">Eve</h1><p id="p-tag"></p><p class="age" id="p-age"></p></div>
   </section>
@@ -452,6 +456,7 @@ ul.plain li{border-bottom:1px solid var(--line)}
 
 <script type="module">
 import { createBrain } from "/web/brain.js";
+import { createPortrait } from "/web/portrait.js";
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------- language (Arabic / English)
@@ -496,8 +501,11 @@ const gb = (b) => (b / 1e9).toFixed(2) + " GB";
 const pct = (x) => x == null ? "—" : Math.round(x * 100) + "%";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-// ---------------------------------------------------------------- the brain: the face of the assistant
+// ---------------------------------------------------------------- the visual: the brain (Eve) or a character's face
 let brain = null, brainFailed = false;
+let portrait = null, portraitFace = null, faceOn = false;
+const faceCache = {};
+const av = () => (faceOn ? portrait : brain);           // the active visual
 function ensureBrain() {
   if (brain || brainFailed) return brain;
   brain = createBrain($("brain3d"));
@@ -505,17 +513,38 @@ function ensureBrain() {
   else { brain.setMood(curMood); brain.advance(1.5); }
   return brain;
 }
-function showCharacter() {
+async function ensureFace(id) {
+  if (portraitFace === id && portrait) return portrait;
+  let data = faceCache[id];
+  if (!data) {
+    try { data = faceCache[id] = await (await fetch("/web/faces/" + id + ".json")).json(); }
+    catch (e) { return null; }
+  }
+  portrait?.dispose();
+  portrait = createPortrait($("face2d"), data);
+  portraitFace = id;
+  if (portrait) { portrait.setMood(curMood); portrait.setGrowth(1); portrait.advance(1.2); }
+  return portrait;
+}
+function showVisual() {
+  const face = state?.persona?.face;
+  if (face && !brainFailed) {                            // a character with its own face
+    document.body.classList.add("isbrain", "isface");
+    if (portraitFace !== face) ensureFace(face).then((p) => { if (!p) { faceOn = false; document.body.classList.remove("isface"); showBrain(); } });
+    faceOn = true;
+  } else { faceOn = false; document.body.classList.remove("isface"); showBrain(); }
+}
+function showBrain() {
   if (brainFailed) return;
   document.body.classList.add("isbrain");          // visible first, so WebGL starts with a real size
   if (!ensureBrain()) document.body.classList.remove("isbrain");
 }
 function setMood(mood, hold) {
   clearTimeout(moodTimer);
-  curMood = mood; brain?.setMood(mood);
-  if (hold) moodTimer = setTimeout(() => { if (!state || !state.sleeping) { curMood = "neutral"; brain?.setMood("neutral"); } }, hold);
+  curMood = mood; av()?.setMood(mood);
+  if (hold) moodTimer = setTimeout(() => { if (!state || !state.sleeping) { curMood = "neutral"; av()?.setMood("neutral"); } }, hold);
 }
-function setTalking(on) { brain?.setTalking(on); }
+function setTalking(on) { av()?.setTalking(on); }
 function setStatus(t) { $("status").textContent = t; }
 
 // ---------------------------------------------------------------- chat
@@ -568,7 +597,7 @@ async function send(text) {
         const piece = j.choices?.[0]?.delta?.content;
         if (piece) {
           if (!started) { started = true; setMood("neutral"); setTalking(true); setStatus(""); }
-          full += piece; bubble.textContent = full; log.scrollTop = log.scrollHeight; brain?.pulse();
+          full += piece; bubble.textContent = full; log.scrollTop = log.scrollHeight; av()?.pulse();
         }
         if (j.pcore) meta = j.pcore;
       }
@@ -689,15 +718,20 @@ function render() {
     wrap.append(row);
     return wrap;
   }));
-  showCharacter();
-  if (brain && s.growth) {
-    brain.setGrowth(s.growth.complete ? 1 : s.growth.value, !grown);
-    brain.setMature(s.growth.complete);
-    grown = true;
+  showVisual();
+  const v = av();
+  if (v && s.growth) {
+    if (faceOn) { v.setGrowth(1); }              // a character's face is always shown whole
+    else {
+      v.setGrowth(s.growth.complete ? 1 : s.growth.value, !grown);
+      v.setMature(s.growth.complete);
+      grown = true;
+    }
   }
   if (s.growth) {
-    $("p-age").textContent = s.growth.complete ? tr("age_complete") : ageText(s.growth);
-    $("p-age").classList.toggle("done", !!s.growth.complete);
+    const complete = s.growth.complete && !faceOn;
+    $("p-age").textContent = faceOn ? "" : (complete ? tr("age_complete") : ageText(s.growth));
+    $("p-age").classList.toggle("done", complete);
   }
   renderVision(s.brain);
   const ref = Object.entries(s.refused_personas || {});
@@ -757,7 +791,7 @@ $("undo").onclick = async () => { try { await api("/api/rollback", "POST"); $("n
 
 // ---------------------------------------------------------------- growth
 let grown = false;
-const maxCells = () => brain?.stats().max || 2600;
+const maxCells = () => av()?.stats().max || 2600;
 const cellsOf = (g) => Math.round(maxCells() * g.value);
 function daysText(d) {
   if (lang !== "ar") return d === 1 ? "1 day" : d + " days";
@@ -806,8 +840,8 @@ let shotImg = null;
 async function drawShare() {
   const cv = $("m-canvas"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
   const font = getComputedStyle(document.body).fontFamily, rtl = lang === "ar";
-  if (!shotImg && brain) {
-    const img = new Image(); img.src = brain.snapshot();
+  if (!shotImg && av()) {
+    const img = new Image(); img.src = av().snapshot();
     try { await img.decode(); shotImg = img; } catch (e) {}
   }
   ctx.save();
