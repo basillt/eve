@@ -19,12 +19,15 @@ import atexit
 import json
 import os
 import shutil
+import platform
 import signal
+import subprocess
 import socket
 import sys
 import threading
 import webbrowser
 
+from fastapi import HTTPException
 from . import hardware, runtime
 from .db import DB
 from .llama import LlamaBackend, LlamaServer, free_port
@@ -57,6 +60,51 @@ def seed_personas(home):
     return folder
 
 
+def _chromium():
+    """Path to a Chromium browser for app-mode (its own window, no tabs or address bar)."""
+    sysname = platform.system()
+    if sysname == "Windows":
+        import glob
+        roots = [os.environ.get("PROGRAMFILES", r"C:\\Program Files"),
+                 os.environ.get("PROGRAMFILES(X86)", r"C:\\Program Files (x86)"),
+                 os.environ.get("LOCALAPPDATA", "")]
+        for root in roots:
+            for rel in (r"Microsoft\\Edge\\Application\\msedge.exe", r"Google\\Chrome\\Application\\chrome.exe"):
+                hit = glob.glob(os.path.join(root, rel))
+                if hit:
+                    return hit[0]
+        return None
+    if sysname == "Darwin":
+        for app in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium"):
+            if os.path.exists(app):
+                return app
+        return None
+    for name in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"):
+        hit = shutil.which(name)
+        if hit:
+            return hit
+    return None
+
+
+def open_window(url, home):
+    """Open Eve in its own window if a Chromium browser is around; else fall back to a browser tab."""
+    exe = _chromium()
+    if not exe:
+        webbrowser.open(url)
+        return
+    profile = os.path.join(home, "runtime", "window")       # a private profile, separate from the user's browser
+    try:
+        flags = 0x08000000 if platform.system() == "Windows" else 0
+        subprocess.Popen([exe, f"--app={url}", f"--user-data-dir={profile}", "--window-size=1200,840",
+                          "--no-first-run", "--no-default-browser-check"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                         creationflags=flags, start_new_session=(platform.system() != "Windows"))
+    except Exception:
+        webbrowser.open(url)
+
+
 def port_free(port):
     with socket.socket() as s:
         try:
@@ -79,7 +127,7 @@ def kill_leftover(pid_file):
         pass
 
 
-def start_engine(home, hw, model_path, cfg, args, progress_factory=runtime.console_progress, on_try=None):
+def start_engine(home, hw, model_path, cfg, args, progress_factory=runtime.console_progress, on_try=None, mmproj=None):
     """Start llama-server with the first build that works on this machine."""
     if args.llama_server:
         order = [("custom", args.llama_server)]
@@ -100,7 +148,7 @@ def start_engine(home, hw, model_path, cfg, args, progress_factory=runtime.conso
             if on_try:
                 on_try(flavor, "start")
             print(f"  starting the engine ({flavor})…")
-            server = LlamaServer(exe, model_path, ctx=args.ctx, log_path=os.path.join(logs, "llama-server.log"))
+            server = LlamaServer(exe, model_path, ctx=args.ctx, log_path=os.path.join(logs, "llama-server.log"), mmproj=mmproj)
             server.start()
             cfg["flavor"] = flavor
             return server, flavor
@@ -117,11 +165,11 @@ class LateBackend:
 
     def __init__(self, setup):
         self.setup, self.target = setup, None
-        self.name, self.model_id = "setup", "…"
+        self.name, self.model_id, self.vision = "setup", "…", False
 
     def ready(self, backend):
         self.target = backend
-        self.name, self.model_id = backend.name, backend.model_id
+        self.name, self.model_id, self.vision = backend.name, backend.model_id, backend.vision
 
     def stream(self, messages, max_tokens, temperature):
         if not self.target:
@@ -192,6 +240,9 @@ def main(argv=None):
 
     home = os.path.abspath(args.home)
     os.makedirs(os.path.join(home, "runtime"), exist_ok=True)
+    pkgs = runtime.pkgs_dir(home)                     # on-demand packages (OCR) live here
+    if os.path.isdir(pkgs) and pkgs not in sys.path:
+        sys.path.insert(0, pkgs)
     log_to_file(home)
     url = running_instance(home)
     if args.quit:
@@ -207,7 +258,7 @@ def main(argv=None):
     if url:
         print(f"  Eve is already running: {url}")
         if not args.no_browser:
-            webbrowser.open(url)
+            open_window(url, home)
         return
 
     cfg = load_config(home)
@@ -236,13 +287,23 @@ def main(argv=None):
             hw = hardware.describe()
             gpu = ", ".join(f"{g['name']} {g['vram_gb']:.0f}GB" for g in hw["nvidia"]) or "no NVIDIA GPU"
             print(f"\n  Eve — {hw['os']}, {hw['ram_gb']:.0f} GB RAM, {gpu}\n  folder: {home}")
+            mmproj, is_vision = None, False
             if args.model_file:
                 model_path, label = os.path.abspath(args.model_file), os.path.basename(args.model_file)
             else:
                 model_id = args.model or cfg.get("model") or runtime.pick_model(hw)
                 info = runtime.model_info(model_id)
-                setup.update(step="model", model=info["name"], size_gb=info.get("size_gb"), done=0, total=0)
+                is_vision = bool(info.get("vision"))
+                setup.update(step="model", model=info["name"], size_gb=info.get("size_gb"), done=0, total=0, vision=is_vision)
                 model_path = runtime.ensure_model(home, model_id, progress)
+                if is_vision:
+                    try:
+                        with open(os.path.join(home, "models", model_id, "source.json"), encoding="utf-8") as f:
+                            repo = json.load(f)["repo"]
+                    except (OSError, ValueError, KeyError):
+                        repo = info["repos"][0]
+                    setup.update(step="vision", done=0, total=0)
+                    mmproj = runtime.ensure_mmproj(home, model_id, repo, progress)
                 cfg["model"] = model_id
                 label = info["name"]
             setup["model"] = label
@@ -251,12 +312,12 @@ def main(argv=None):
 
             def on_try(flavor, step):
                 setup.update(step=step, flavor=flavor, done=0, total=0)
-            server, flavor = start_engine(home, hw, model_path, cfg, args, progress, on_try)
+            server, flavor = start_engine(home, hw, model_path, cfg, args, progress, on_try, mmproj=mmproj)
             servers.append(server)
             with open(pid_file, "w") as f:
                 f.write(str(server.proc.pid))
             save_config(home, cfg)
-            late.ready(LlamaBackend(server, label, info={
+            late.ready(LlamaBackend(server, label, vision=is_vision, info={
                 "flavor": flavor, "ram_gb": hw["ram_gb"], "vram_gb": hw["vram_gb"],
                 "gpu": hw["nvidia"][0]["name"] if hw["nvidia"] else None}))
             setup["step"] = "ready"
@@ -272,6 +333,38 @@ def main(argv=None):
         if setup["step"] == "error":
             threading.Thread(target=prepare, daemon=True).start()
         return {"ok": True}
+
+    switching = threading.Lock()
+
+    @app.post("/api/vision")
+    def set_vision(on: dict):
+        want = bool(on.get("on"))
+        if args.model_file:
+            raise HTTPException(400, "a model file was given on the command line; vision can't be switched")
+        if not switching.acquire(blocking=False):
+            raise HTTPException(409, "already switching")
+        try:
+            hw = hardware.describe()
+            is_vision_now = bool(runtime.model_info(cfg.get("model") or runtime.pick_model(hw)).get("vision"))
+            if want == is_vision_now and late.target is not None:
+                return {"ok": True, "vision": want}
+            if want:
+                if not runtime.model_info(cfg.get("model", "")).get("vision"):
+                    cfg["text_model"] = cfg.get("model") or runtime.pick_model(hw)
+                cfg["model"] = runtime.pick_vision(hw)
+            else:
+                cfg["model"] = cfg.get("text_model") or runtime.pick_model(hw)
+            save_config(home, cfg)
+            for sv in servers:
+                sv.stop()
+            servers.clear()
+            late.target = None
+            late.name, late.model_id = "setup", "…"
+            setup.update(step="check", error=None, done=0, total=0, flavor=None, model=None, vision=want)
+            threading.Thread(target=prepare, daemon=True).start()
+            return {"ok": True, "vision": want}
+        finally:
+            switching.release()
 
     @app.post("/api/quit")
     def quit_app():
@@ -289,7 +382,7 @@ def main(argv=None):
     threading.Thread(target=prepare, daemon=True).start()
     print(f"\n  open: {url}\n  (Eve keeps running in the background; quit it from Settings)\n")
     if not args.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: open_window(url, home)).start()
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", log_config=None)
     finally:

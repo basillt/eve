@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS usage(day TEXT, layer INTEGER, expert INTEGER, count 
   PRIMARY KEY(day, layer, expert));
 CREATE TABLE IF NOT EXISTS reports(night TEXT PRIMARY KEY, body TEXT, created REAL);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
-CREATE TABLE IF NOT EXISTS docs(id INTEGER PRIMARY KEY, name TEXT, kind TEXT, chars INTEGER, chunks INTEGER, created REAL);
+CREATE TABLE IF NOT EXISTS docs(id INTEGER PRIMARY KEY, name TEXT, kind TEXT, chars INTEGER, chunks INTEGER, created REAL, image TEXT);
 CREATE TABLE IF NOT EXISTS chunks(id INTEGER PRIMARY KEY, doc_id INTEGER, ord INTEGER, text TEXT);
 CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id, ord);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(norm);
@@ -55,7 +55,14 @@ class DB:
         self.con = sqlite3.connect(self.path, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
         self.con.executescript(SCHEMA)
+        self._migrate()
         self.con.commit()
+
+    def _migrate(self):
+        """Add columns that newer versions need to a database made by an older one."""
+        have = {r[1] for r in self.con.execute("PRAGMA table_info(docs)")}
+        if "image" not in have:
+            self.con.execute("ALTER TABLE docs ADD COLUMN image TEXT")
 
     def _x(self, sql, args=()):
         with self.lock:
@@ -139,33 +146,54 @@ class DB:
         return self._x("DELETE FROM memories WHERE id=?", (memory_id,)).rowcount == 1
 
     # ---------------------------------------------------------- files
-    def add_doc(self, name, kind, text):
+    def add_doc(self, name, kind, text, image_bytes=None, ext=".png"):
         from . import docs as docslib
         pieces = docslib.chunks(text)
+        image_rel = None
         with self.lock:
-            cur = self.con.execute("INSERT INTO docs(name, kind, chars, chunks, created) VALUES(?,?,?,?,?)",
-                                   (name, kind, len(text), len(pieces), time.time()))
+            cur = self.con.execute("INSERT INTO docs(name, kind, chars, chunks, created, image) VALUES(?,?,?,?,?,?)",
+                                   (name, kind, len(text), len(pieces), time.time(), None))
             doc_id = cur.lastrowid
             for i, piece in enumerate(pieces):
                 cid = self.con.execute("INSERT INTO chunks(doc_id, ord, text) VALUES(?,?,?)", (doc_id, i, piece)).lastrowid
                 self.con.execute("INSERT INTO chunks_fts(rowid, norm) VALUES(?,?)", (cid, docslib.norm_text(piece)))
+            if image_bytes is not None:
+                folder = os.path.join(self.dir, "images")
+                os.makedirs(folder, exist_ok=True)
+                image_rel = os.path.join("images", f"{doc_id}{ext}")
+                with open(os.path.join(self.dir, image_rel), "wb") as f:
+                    f.write(image_bytes)
+                self.con.execute("UPDATE docs SET image=? WHERE id=?", (image_rel, doc_id))
             self.con.commit()
         return doc_id
 
+    def doc_image_path(self, doc_id):
+        rows = self._q("SELECT image FROM docs WHERE id=?", (doc_id,))
+        if rows and rows[0]["image"]:
+            p = os.path.join(self.dir, rows[0]["image"])
+            return p if os.path.exists(p) else None
+        return None
+
     def docs(self):
-        return self._q("SELECT id, name, kind, chars, chunks, created FROM docs ORDER BY id DESC")
+        return self._q("SELECT id, name, kind, chars, chunks, created, (image IS NOT NULL) AS has_image FROM docs ORDER BY id DESC")
 
     def doc(self, doc_id):
-        rows = self._q("SELECT id, name, kind, chars, chunks, created FROM docs WHERE id=?", (doc_id,))
+        rows = self._q("SELECT id, name, kind, chars, chunks, created, image FROM docs WHERE id=?", (doc_id,))
         return rows[0] if rows else None
 
     def delete_doc(self, doc_id):
+        img = self.doc_image_path(doc_id)
         with self.lock:
             ids = [r[0] for r in self.con.execute("SELECT id FROM chunks WHERE doc_id=?", (doc_id,))]
             self.con.executemany("DELETE FROM chunks_fts WHERE rowid=?", [(i,) for i in ids])
             self.con.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
             n = self.con.execute("DELETE FROM docs WHERE id=?", (doc_id,)).rowcount
             self.con.commit()
+        if img:
+            try:
+                os.remove(img)
+            except OSError:
+                pass
         return n == 1
 
     def search_docs(self, question, doc_ids=None, k=3, min_hits=2):

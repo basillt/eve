@@ -129,6 +129,29 @@ def files():
         notes.append("⚠️ the model did not repeat the code word, but the file was used")
 
 
+@step("image: on-demand OCR reads the text in a picture")
+def image():
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    im = Image.new("RGB", (560, 150), "white"); d = ImageDraw.Draw(im)
+    try:
+        f = ImageFont.truetype("arial.ttf", 44)
+    except OSError:
+        f = None
+    d.text((24, 50), "CODEWORD MANGO", font=f, fill="black")
+    buf = io.BytesIO(); im.save(buf, "PNG")
+    # first image: Eve installs the reader in the background and returns 400 (ocr_setup); poll until it reads
+    import time as _t
+    t0 = _t.time(); doc = None
+    while _t.time() - t0 < 10 * 60:
+        try:
+            doc = api("/api/files?name=sign.png", raw=buf.getvalue(), ctype="application/octet-stream", timeout=30)
+            break
+        except urllib.error.HTTPError:
+            _t.sleep(10)
+    assert doc and doc["kind"] == "image" and doc["has_image"], "image was not read after OCR setup"
+    notes.append(f"OCR read: `{(doc.get('chars') or 0)} chars from the image`")
+
 @step("night of learning")
 def night():
     chat("Remember that I study electrical engineering and I like to work early in the morning.")
@@ -206,7 +229,7 @@ install()
 if start():
     wait_ready()
     if results[-1][1]:
-        chat_en(); chat_ar(); files(); night(); screenshot(); second()
+        chat_en(); chat_ar(); files(); image(); night(); screenshot(); second()
     quit_()
 uninstall()
 sys.exit(0 if report() else 1)

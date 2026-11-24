@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from . import docs as docslib
 from . import persona as personalib
+from . import runtime as runtimelib
 from .db import DB
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -192,6 +193,7 @@ def growth_of(days, memories, nights, files=0):
 
 
 DOC_CONTEXT_CHARS = 3200
+COMPLETE_AT = 12          # saved memories at which Eve "knows the basics about you": the brain fills and turns gold
 
 
 def create_app(backend, db, personas_dir, default_max_tokens=512, night_overrides=None):
@@ -209,11 +211,30 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
             raise HTTPException(500, "no usable persona cards (check the rights block)")
         return cards.get(db.get("persona")) or next(iter(cards.values()))
 
-    def doc_context(question, attached):
+    def image_parts(attached, limit=3):
+        """Attached images as data URIs for a vision model, newest-first, a few at most."""
+        import base64, mimetypes
+        out = []
+        for d in (attached or []):
+            doc = db.doc(int(d))
+            if not doc or doc["kind"] != "image":
+                continue
+            path = db.doc_image_path(int(d))
+            if not path:
+                continue
+            mime = mimetypes.guess_type(path)[0] or "image/png"
+            with open(path, "rb") as f:
+                out.append({"doc_id": int(d), "name": doc["name"],
+                            "data_uri": f"data:{mime};base64," + base64.b64encode(f.read()).decode()})
+            if len(out) >= limit:
+                break
+        return out
+
+    def doc_context(question, attached, skip=()):
         """Pieces of the user's files that help answer. Attached files are searched first; when the
         question matches nothing in them ("summarise this"), the start of the file is used. Without
         attachments the whole library is searched, but only clear matches are used."""
-        attached = [int(d) for d in (attached or []) if db.doc(int(d))][:5]
+        attached = [int(d) for d in (attached or []) if db.doc(int(d)) and int(d) not in skip][:5]
         if attached:
             found = db.search_docs(question, attached, k=3, min_hits=1)
             if not found:
@@ -250,9 +271,19 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
                 db.remember(question.strip()[len(prefix):], source="chat")
         card = current_persona()
         notes = [m["text"] for m in db.recall(question)]
-        passages = doc_context(question, req.docs)
+        vision = bool(getattr(backend, "vision", False))
+        images = image_parts(req.docs) if vision else []
+        # with a vision model the image goes to the model directly, so skip its OCR text in the context
+        passages = doc_context(question, req.docs, skip={im["doc_id"] for im in images})
         sources = list({p["doc_id"]: {"id": p["doc_id"], "name": p["name"]} for p in passages}.values())
+        sources += [{"id": im["doc_id"], "name": im["name"]} for im in images
+                    if im["doc_id"] not in {s["id"] for s in sources}]
         messages = [{"role": "system", "content": personalib.system_prompt(card, notes, passages)}] + turns[-20:]
+        if images:
+            last = dict(messages[-1])
+            last["content"] = [{"type": "text", "text": last["content"]}] + \
+                              [{"type": "image_url", "image_url": {"url": im["data_uri"]}} for im in images]
+            messages[-1] = last
 
         db.add_message(conv, "user", question)
         rid = "chatcmpl-" + uuid.uuid4().hex[:24]
@@ -346,7 +377,7 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
         days = int((time.time() - born) // 86400) + 1
         mem, nights, files = len(db.memories()), len(db.reports(10000)), len(db.docs())
         return {"value": growth_of(days, mem, nights, files), "days": days, "memories": mem,
-                "nights": nights, "files": files}
+                "nights": nights, "files": files, "complete": mem >= COMPLETE_AT, "complete_at": COMPLETE_AT}
 
     @app.get("/api/state")
     def get_state():
@@ -370,20 +401,46 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
         }
 
     # ---------------------------------------------------------- files
+    ocr_state = {"installing": False}
+
+    def ensure_ocr_async():
+        home = os.path.dirname(db.dir)
+        ok = runtimelib.ensure_ocr(home)
+        ocr_state["installing"] = False
+        return ok
+
     @app.post("/api/files")
     async def add_file(request: Request, name: str):
         data = await request.body()
         name = os.path.basename(name.replace("\\", "/"))[:120] or "file"
+        if docslib.kind_of(name) == "image" and not docslib.ocr_available() and not getattr(backend, "vision", False):
+            if not ocr_state["installing"]:
+                ocr_state["installing"] = True
+                threading.Thread(target=ensure_ocr_async, daemon=True).start()
+            raise HTTPException(400, {"code": "ocr_setup"})
         try:
             kind, text = docslib.extract(name, data)
         except docslib.FileError as e:
             raise HTTPException(400, {"code": str(e)})
-        doc_id = db.add_doc(name, kind, text)
-        return db.doc(doc_id)
+        if kind == "image":
+            ext = os.path.splitext(name)[1].lower() or ".png"
+            doc_id = db.add_doc(name, kind, text, image_bytes=data, ext=ext)
+        else:
+            doc_id = db.add_doc(name, kind, text)
+        d = db.doc(doc_id)
+        d["has_image"] = bool(d.pop("image", None))
+        return d
 
     @app.get("/api/files")
     def list_files():
         return db.docs()
+
+    @app.get("/api/files/{doc_id}/image")
+    def file_image(doc_id: int):
+        path = db.doc_image_path(doc_id)
+        if not path:
+            raise HTTPException(404, "no image")
+        return FileResponse(path)
 
     @app.delete("/api/files/{doc_id}")
     def delete_file(doc_id: int):

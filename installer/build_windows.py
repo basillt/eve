@@ -24,7 +24,7 @@ ROOT = os.path.dirname(HERE)
 PY_URL = ("https://github.com/astral-sh/python-build-standalone/releases/download/20261110/"
           "cpython-3.12.16%2B20261110-x86_64-pc-windows-msvc-install_only_stripped.tar.gz")
 PY_SHA256 = "355ee61b8207b91574491b1c6dc9b0ebb4408fc56bfafe498f3ef439314b52dc"
-TRIM = ["Lib/site-packages/pip", "Scripts", "include", "libs", "Lib/ensurepip", "Lib/idlelib", "Lib/tkinter",
+TRIM = ["Scripts", "include", "libs", "Lib/idlelib", "Lib/tkinter",   # keep pip + ensurepip: on-demand OCR installs with them
         "Lib/turtledemo", "Lib/test", "Lib/lib2to3", "tcl", "DLLs/_tkinter.pyd", "Lib/site-packages/bin"]
 APP = ["pcore", "web", "personas", "LICENSE", "requirements-app.txt"]
 
@@ -57,9 +57,6 @@ def python_runtime(build):
     for t in TRIM:
         p = os.path.join(py, t)
         shutil.rmtree(p, ignore_errors=True) if os.path.isdir(p) else (os.path.exists(p) and os.remove(p))
-    for f in os.listdir(site):
-        if f.startswith("pip-") and f.endswith(".dist-info"):
-            shutil.rmtree(os.path.join(site, f))
     for root, dirs, _ in os.walk(py):
         for d in list(dirs):
             if d == "__pycache__":

@@ -252,12 +252,16 @@ export function createBrain(canvas, { neurons = 2600, seed = 7, autoplay = true 
   // state
   let mood = "neutral", talking = false, cur = { ...MOODS.neutral }, budget = 0, wave = 0;
   const target = { base: new THREE.Color(cur.base), hot: new THREE.Color(cur.hot) };
+  let mature = false;
+  const MATURE_NEUTRAL = { base: "#ffcf4a", hot: "#fff3b0" };     // "Eve knows the basics about you"
   const setMood = (m) => {
     if (!MOODS[m]) m = "neutral";
     if (m === "surprised" && mood !== "surprised") for (let i = 0; i < 120; i++) spawn(null, 3 + Math.floor(rand() * 5));
     mood = m; cur = { ...MOODS[m] };
-    target.base.set(cur.base); target.hot.set(cur.hot);
+    const c = (mature && m === "neutral") ? MATURE_NEUTRAL : cur;
+    target.base.set(c.base); target.hot.set(c.hot);
   };
+  const setMature = (on) => { on = !!on; if (on === mature) return; mature = on; setMood(mood); };
   const setTalking = (on) => { talking = !!on; };
   const applyGrowth = (g) => {
     const N = Math.max(60, Math.min(n, Math.round(n * g)));
@@ -393,7 +397,7 @@ export function createBrain(canvas, { neurons = 2600, seed = 7, autoplay = true 
   if (autoplay) raf = requestAnimationFrame(frame);   // autoplay:false = driven by advance() only (video, tests)
 
   return {
-    setMood, setTalking, pulse, setGrowth,
+    setMood, setTalking, pulse, setGrowth, setMature,
     stats: () => ({ neurons: alive_n, wires: alive_e, max: n }),
     snapshot() { renderer.render(scene, camera); return canvas.toDataURL("image/png"); },   // read in the same task as the draw
     advance(seconds, fps = 30) {                      // for tests and previews: simulate time, then draw

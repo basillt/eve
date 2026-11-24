@@ -12,6 +12,7 @@ import os
 import platform
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import time
@@ -34,7 +35,51 @@ MODELS = [
      "size_gb": 5.7, "license": "Apache-2.0"},
     {"id": "xl", "label": "extra large (35B MoE, 3B active)", "name": "Qwen3.6 35B-A3B", "repos": ["unsloth/Qwen3.6-35B-A3B-GGUF"],
      "size_gb": 21.0, "license": "Apache-2.0"},
+    # vision models (see images). They also chat, so turning vision on just switches Eve to one of these.
+    {"id": "vision", "label": "vision (3B, sees images)", "name": "Qwen2.5-VL 3B", "vision": True,
+     "repos": ["ggml-org/Qwen2.5-VL-3B-Instruct-GGUF", "unsloth/Qwen2.5-VL-3B-Instruct-GGUF", "bartowski/Qwen2.5-VL-3B-Instruct-GGUF"],
+     "size_gb": 3.2, "license": "Apache-2.0"},
+    {"id": "vision-large", "label": "vision (7B, sees images)", "name": "Qwen2.5-VL 7B", "vision": True,
+     "repos": ["ggml-org/Qwen2.5-VL-7B-Instruct-GGUF", "unsloth/Qwen2.5-VL-7B-Instruct-GGUF", "bartowski/Qwen2.5-VL-7B-Instruct-GGUF"],
+     "size_gb": 6.5, "license": "Apache-2.0"},
 ]
+
+
+def pkgs_dir(home):
+    """Where on-demand Python packages (the OCR engine) are installed; added to sys.path at startup."""
+    return os.path.join(home, "pkgs")
+
+
+def ensure_ocr(home, log=print):
+    """Install the image-text reader (rapidocr-onnxruntime) on first use. Returns True if ready.
+    Kept out of the installer so the base download stays tiny; needs internet the first time only."""
+    from . import docs as docslib
+    if docslib.ocr_available():
+        return True
+    target = pkgs_dir(home)
+    os.makedirs(target, exist_ok=True)
+    if target not in sys.path:
+        sys.path.insert(0, target)
+    log("  installing the image-text reader (one-time)…")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+                        "--target", target, "rapidocr-onnxruntime"],
+                       check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception as e:
+        log(f"  image-text reader install failed: {e}")
+        return False
+    docslib.reset_ocr()
+    return docslib.ocr_available()
+
+
+def vision_models():
+    return [m for m in MODELS if m.get("vision")]
+
+
+def pick_vision(hw):
+    """The vision model that fits this machine (7B if it has the memory, else 3B)."""
+    usable = hw["ram_gb"] + hw.get("vram_gb", 0)
+    return "vision-large" if usable >= 14 else "vision"
 QUANT = "Q4_K_M"
 
 
@@ -143,12 +188,36 @@ def resolve_gguf(repo, quant=QUANT):
     return sorted(exact or cands, key=lambda c: len(c[0]))[0]
 
 
+def resolve_mmproj(repo, quant=QUANT):
+    """(filename, size) of the vision projector (mmproj) GGUF in a repo, if any."""
+    info = _get_json(f"https://huggingface.co/api/models/{repo}?blobs=true")
+    cands = [(s["rfilename"], s.get("size") or 0) for s in info.get("siblings", [])
+             if "mmproj" in s["rfilename"].lower() and s["rfilename"].lower().endswith(".gguf") and "/" not in s["rfilename"]]
+    if not cands:
+        raise FileNotFoundError(f"no mmproj in {repo}")
+    # prefer an f16 projector (small and accurate); else the smallest
+    best = [c for c in cands if "f16" in c[0].lower()] or cands
+    return sorted(best, key=lambda c: c[1] or len(c[0]))[0]
+
+
+def ensure_mmproj(home, model_id, repo, progress_factory=console_progress):
+    """Path to the mmproj file for a vision model, downloading it next to the model."""
+    folder = os.path.join(home, "models", model_id)
+    have = [f for f in os.listdir(folder) if "mmproj" in f.lower() and f.endswith(".gguf")] if os.path.isdir(folder) else []
+    if have:
+        return os.path.join(folder, have[0])
+    name, size = resolve_mmproj(repo)
+    url = f"https://huggingface.co/{repo}/resolve/main/{name}"
+    print(f"  vision projector: {repo}/{name} ({size / 1e9:.2f} GB)")
+    return download(url, os.path.join(folder, name), progress_factory("vision") if progress_factory else None)
+
+
 def ensure_model(home, model_id, progress_factory=console_progress):
     """Path to the GGUF for this model size, downloading it on first use."""
     m = model_info(model_id)
     folder = os.path.join(home, "models", model_id)
     if os.path.isdir(folder):
-        have = [f for f in os.listdir(folder) if f.endswith(".gguf")]
+        have = [f for f in os.listdir(folder) if f.endswith(".gguf") and "mmproj" not in f.lower()]
         if have:
             return os.path.join(folder, have[0])
     errors = []

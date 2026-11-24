@@ -21,9 +21,10 @@ and sleeps at night while she sorts the day's memories.
 - **Runs locally.** It picks a model that fits your RAM and graphics card, downloads it once, and runs it with llama.cpp.
 - **Remembers.** It keeps notes about you in a local SQLite file. You can read and delete every one of them.
 - **Learns at night.** At 03:00, or when you press "Sleep and learn now", it reads the day's chats and saves what you told it about yourself. It never saves passwords or long numbers.
-- **Reads your files.** It can read PDF, Word (.docx) and text files and answer from them, showing which file it used. The files stay on your computer.
-- **Has a brain that grows.** It starts as a sparse outline and gains neurons with every memory, night, day and file. The brain also reacts to what Eve is doing: it shows thinking, talking, happy, sad, confused, surprised and sleeping.
+- **Reads your files and images.** It reads PDF, Word (.docx) and text files, and reads the text inside images (screenshots, photos of pages) — showing which file it used. Turn on **See images** in Settings for a vision model that understands the picture itself, in any language. The files stay on your computer.
+- **Has a brain that grows.** It starts as a sparse outline and gains neurons with every memory, night, day and file. Once Eve has learned the basics about you, the brain fills and turns gold. It also reacts to what Eve is doing: thinking, talking, happy, sad, confused, surprised, sleeping.
 - **Makes a shareable morning card.** After a night of learning, Eve makes an image you can share. Nothing it learned about you appears on the image unless you tick it.
+- **Its own window.** Eve opens as its own app window (not a browser tab), with its own icon.
 - **Speaks Arabic and English.** The interface switches with one button.
 - **Has characters with rights.** You can make your own character, which is a name and a way of talking. Every character card must say who holds its rights.
 
@@ -34,17 +35,18 @@ and sleeps at night while she sorts the day's memories.
 ## It grows with you
 
 <p align="center">
-  <img src="docs/brain-day-1.jpg" width="49%" alt="Eve on day one: a sparse brain">
-  <img src="docs/brain-day-41.jpg" width="49%" alt="Eve after 41 days: a dense, glowing brain">
+  <img src="docs/brain-day-1.jpg" width="33%" alt="Eve on day one: a sparse brain">
+  <img src="docs/brain-day-41.jpg" width="33%" alt="Eve after 41 days: a dense brain">
+  <img src="docs/brain-complete.jpg" width="33%" alt="Eve's brain complete: full and gold">
 </p>
-<p align="center"><sub>Day 1 and day 41. Every memory, night and file adds neurons, and each new one is born with a flash.</sub></p>
+<p align="center"><sub>Day 1, day 41, and complete. Every memory, night and file adds neurons; once Eve knows your basics the brain fills and turns gold.</sub></p>
 
 ## A look inside
 
 <table>
 <tr>
 <td width="50%"><img src="docs/chat-with-file.jpg" alt="Chat: asking about an attached Word file, and the answer names the file"><br><sub><b>Chat with your files.</b> Attach a file and the answer shows where it came from.</sub></td>
-<td width="50%"><img src="docs/files.jpg" alt="The Files tab with two files"><br><sub><b>Files.</b> PDF, Word and text, searched on your machine.</sub></td>
+<td width="50%"><img src="docs/image-chat.jpg" alt="Asking about an attached image; the answer cites it"><br><sub><b>Images.</b> Attach or paste a picture; Eve reads the text in it (or sees it, with the vision model).</sub></td>
 </tr>
 <tr>
 <td><img src="docs/memory.jpg" alt="The Memory tab: everything Eve remembers, each line with a Delete button"><br><sub><b>Memory.</b> Everything Eve remembers about you, and you can delete any line.</sub></td>
@@ -112,6 +114,9 @@ This is an early version.
 | NVIDIA graphics cards | The CUDA build is chosen first when an NVIDIA card is found, but **it is not yet tested on a machine with one** |
 | Real Qwen models | Qwen3.5 4B and 0.8B tested on Windows. The 0.8B model, chosen for computers with less than 6 GB of RAM, answers poorly, especially in Arabic |
 | Files (PDF, Word, text) | Done and tested in Arabic and English. A badly made Arabic PDF can come out with letters in the wrong order |
+| Images (OCR) | Reads text in images; the reader installs on first use. Tested on Windows (CI). Arabic text in images is hit-or-miss |
+| Vision model (See images) | Wired: switches to Qwen2.5-VL and sends the picture to the model. The engine path is tested, but the VL model download itself is newer and lightly tested |
+| Its own window | Opens via Edge/Chrome in app-mode (no tabs or address bar). Falls back to a browser tab if neither is installed |
 | Nightly LoRA training | Exists in the research engine (Python), not yet connected to llama.cpp |
 | Windows installer | Built and tested on every change on a Windows machine (GitHub Actions, no GPU): it installs, downloads the engine and Qwen3.5 4B, chats in English and Arabic, answers from a file, runs a night, quits and uninstalls. See `windows-test-report.md` in the [nightly release](https://github.com/basillt/eve/releases/tag/nightly) |
 
@@ -125,15 +130,18 @@ This is an early version.
 | `pcore/runtime.py` | Model list, model choice by hardware, resumable downloads |
 | `pcore/hardware.py` | Detects RAM, graphics card and OS |
 | `pcore/reflect.py` | Nightly learning on any machine: reads the day's chats and saves what matters |
-| `pcore/docs.py` | Reads files (PDF, Word, text), cuts them into pieces, prepares Arabic-aware search |
+| `pcore/docs.py` | Reads files (PDF, Word, text) and the text in images (OCR), cuts them into pieces, prepares Arabic-aware search |
 | `pcore/db.py` | One SQLite file with your chats, corrections, memories and files, independent of the model |
 | `pcore/persona.py` | Character cards. A card without `rights` is refused |
 | `pcore/server.py` | Local OpenAI-compatible server plus the app API |
 | `web/index.html` | The app: chat, brain, memory, files, characters, settings, morning card |
 | `web/brain.js` | The brain: ~2600 neurons, sparks, moods and growth (three.js, bundled in `web/vendor/`) |
 
-### Files
-Add files from the Files tab, with the paperclip next to the message box, or by dropping them on the chat.
+### Files and images
+Add files from the Files tab, with the paperclip next to the message box, by dropping them on the chat, or by **pasting** (Ctrl+V — including a screenshot).
+- PDF, Word (.docx) and text are read directly. Images (png, jpg, …) are read with OCR, so Eve can answer from the text in a screenshot or a photo of a page.
+- The OCR reader downloads itself the first time you use an image (once, needs internet), to keep the installer small.
+- **See images** in Settings switches Eve to a vision model that understands the picture itself — photos, diagrams, any language — instead of only its text. That model is an extra download the first time.
 - Text is pulled out locally and searched with SQLite FTS5. There is no extra model, so it works on any machine.
 - Arabic search drops diacritics and the article «ال», and treats أ/إ/آ, ى/ي and ة/ه as the same letter. So «المكتبة» finds «مكتبه».
 - An attached file is searched first. If the question is vague, like "summarise this", Eve reads the start of the file. With nothing attached, Eve searches all your files but only uses clear matches.

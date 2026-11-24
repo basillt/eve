@@ -21,7 +21,10 @@ CHUNK = 900                         # characters per piece
 OVERLAP = 150
 
 KINDS = {".pdf": "pdf", ".docx": "docx", ".txt": "text", ".md": "text", ".csv": "text", ".json": "text",
-         ".html": "text", ".htm": "text", ".log": "text"}
+         ".html": "text", ".htm": "text", ".log": "text",
+         ".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", ".bmp": "image", ".gif": "image"}
+
+IMAGE_EXTS = {e for e, k in KINDS.items() if k == "image"}
 
 
 class FileError(ValueError):
@@ -66,6 +69,75 @@ def _docx(data):
     return text
 
 
+_OCR = None
+_OCR_TRIED = False
+
+
+def reset_ocr():
+    """Call after installing the OCR packages so the next use picks them up."""
+    global _OCR, _OCR_TRIED
+    import importlib
+    _OCR, _OCR_TRIED = None, False
+    importlib.invalidate_caches()
+
+
+def ocr_available():
+    import importlib.util
+    return importlib.util.find_spec("rapidocr_onnxruntime") is not None
+
+
+def _ocr_engine():
+    global _OCR, _OCR_TRIED
+    if _OCR_TRIED:
+        return _OCR
+    _OCR_TRIED = True
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        _OCR = RapidOCR()
+    except Exception:
+        _OCR = None
+    return _OCR
+
+
+def ocr_image(data):
+    """Text read from an image, in rough reading order. '' if the engine is missing or finds nothing."""
+    engine = _ocr_engine()
+    if engine is None:
+        raise FileError("no_ocr")
+    import io as _io
+    from PIL import Image
+    import numpy as np
+    try:
+        im = Image.open(_io.BytesIO(data))
+        im.load()
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        w, h = im.size
+        if max(w, h) > 2600:                               # keep OCR fast and memory-light
+            scale = 2600 / max(w, h)
+            im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+    except Exception:
+        raise FileError("bad_image")
+    res, _ = engine(np.asarray(im))
+    if not res:
+        return ""
+    # group boxes into lines by their vertical centre, then left-to-right within a line
+    rows = []
+    for box, text, _conf in res:
+        ys = [p[1] for p in box]; xs = [p[0] for p in box]
+        rows.append(((min(ys) + max(ys)) / 2, min(xs), text))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    lines, cur, cur_y = [], [], None
+    for y, x, text in rows:
+        if cur_y is None or abs(y - cur_y) <= 14:
+            cur.append((x, text)); cur_y = y if cur_y is None else (cur_y + y) / 2
+        else:
+            lines.append(" ".join(t for _, t in sorted(cur))); cur, cur_y = [(x, text)], y
+    if cur:
+        lines.append(" ".join(t for _, t in sorted(cur)))
+    return "\n".join(lines).strip()
+
+
 def _pdf(data):
     try:
         from pypdf import PdfReader
@@ -101,6 +173,11 @@ def extract(name, data):
     kind = kind_of(name)
     if not kind:
         raise FileError("bad_type")
+    if kind == "image":
+        text = ocr_image(data)
+        if not text:
+            raise FileError("image_no_text")
+        return kind, text[:MAX_CHARS]
     if kind == "pdf":
         text = _pdf(data)
     elif kind == "docx":

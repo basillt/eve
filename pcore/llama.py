@@ -28,18 +28,21 @@ def free_port():
 
 
 class LlamaServer:
-    def __init__(self, exe, model, ctx=8192, port=None, log_path=None, threads=None, extra=()):
+    def __init__(self, exe, model, ctx=8192, port=None, log_path=None, threads=None, extra=(), mmproj=None):
         self.exe, self.model, self.ctx = exe, model, ctx
         self.port = port or free_port()
         self.log_path = log_path
         self.threads = threads
         self.extra = list(extra)
+        self.mmproj = mmproj               # a vision projector file turns on image input
         self.proc = None
         self.url = f"http://127.0.0.1:{self.port}"
 
     def command(self):
         cmd = [self.exe, "-m", self.model, "--host", "127.0.0.1", "--port", str(self.port),
                "-c", str(self.ctx), "--jinja", "--reasoning", "off", "--no-webui", "-np", "1"]
+        if self.mmproj:
+            cmd += ["--mmproj", self.mmproj]
         if self.threads:
             cmd += ["-t", str(self.threads)]
         return cmd + self.extra
@@ -98,10 +101,11 @@ class LlamaBackend:
     """Backend for pcore.server, powered by a running LlamaServer."""
     name = "llama"
 
-    def __init__(self, server, model_label, info=None):
+    def __init__(self, server, model_label, info=None, vision=False):
         self.server = server
         self.model_id = model_label
         self.info = info or {}
+        self.vision = vision
         self.lock = threading.Lock()
 
     def _body(self, messages, max_tokens, temperature, stream):
@@ -134,7 +138,8 @@ class LlamaBackend:
         return obj["choices"][0]["message"].get("content") or ""
 
     def brain(self):
-        b = {"engine": "llama.cpp", "model": self.model_id, "ctx": self.server.ctx, "alive": self.server.alive()}
+        b = {"engine": "llama.cpp", "model": self.model_id, "ctx": self.server.ctx, "alive": self.server.alive(),
+             "vision": self.vision}
         b.update(self.info)
         try:
             b["model_bytes"] = os.path.getsize(self.server.model)
