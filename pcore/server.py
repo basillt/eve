@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from . import docs as docslib
 from . import persona as personalib
+from . import crisis as crisislib
 from . import runtime as runtimelib
 from .db import DB
 
@@ -318,6 +319,13 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
                     if out:
                         result["text"] += out
                         yield out
+                # Safety net: a small model is warm but unreliable, so never leave a self-harm
+                # message without a redirect to real human help. If the model already steered,
+                # this adds nothing.
+                if crisislib.is_crisis(question) and not crisislib.already_steers(result["text"]):
+                    note = crisislib.safety_note(question)
+                    result["text"] += note
+                    yield note
                 backend.flush_usage(db)
             result["emotion"] = filt.emotion
             result["id"] = db.add_message(conv, "assistant", result["text"].strip(), filt.emotion)
