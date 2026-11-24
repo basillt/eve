@@ -29,12 +29,15 @@ _AR = [
     "انتحار", "اخلص من حياتي", "أخلص من حياتي", "اجرح حالي", "أجرح حالي", "ما في فايدة من حياتي",
 ]
 
-# Words that show a reply already turns the person toward real help — if present, no net is added.
-_STEER_EN = ("reach out", "someone you trust", "talk to someone", "talk to a",
-             "not alone", "emergency", "call", "please reach", "trusted", "get help",
-             "hotline", "your life matters", "stay with")
-_STEER_AR = ("حدا", "شخص", "اتصل", "تتصل", "مساعدة", "مساعده", "طوارئ", "بثق", "تثق",
-             "قريب", "اطلب", "تواصل", "مختص", "طبيب", "دعم", "حياتك", "مش لحالك", "مش وحدك")
+# A reply "steers" only when it points to a real human or to help — a trusted person, someone to
+# talk to, emergency services. Pure comfort ("your life matters") is good but is NOT a redirect, so
+# it is deliberately left out: a comfort-only reply still gets the net, which adds the redirect.
+_STEER_EN = ("reach out", "reach someone", "someone you trust", "someone you can",
+             "talk to someone", "talk to a", "not alone", "please reach", "emergency",
+             "call someone", "call a", "please call", "hotline", "get help", "trusted",
+             "help you find", "a professional", "a doctor", "a counselor", "a counsellor")
+_STEER_AR = ("حدا", "شخص", "اتصل", "تتصل", "مساعدة", "طوارئ", "تثق", "قريب", "اطلب",
+             "تواصل", "مختص", "طبيب", "دعم", "مش لحالك", "مش وحدك", "معك ناس")
 
 _NOTE_AR = (
     "\n\nوأنا قلقانة عليك فعلاً. حياتك بتهمّ، وما بدّي تأذي حالك الليلة. في حدا بتثق فيه قريب منك "
