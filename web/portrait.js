@@ -35,12 +35,23 @@ export function createPortrait(canvas, data, { seed = 7 } = {}) {
   if (!ctx) return null;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const aspect = data.aspect || 1.4;
-  const pts = data.points.map(([x, y, b]) => ({ x, y, b, ph: Math.random() * 6.28 }));
+  // a face can bring its own multi-colour palette (weighted); else it uses the mood colours
+  const palette = (data.palette && Array.isArray(data.palette.colors) && data.palette.colors.length) ? data.palette : null;
+  const weights = palette && palette.weights && palette.weights.length === palette.colors.length
+    ? palette.colors.map((_, i) => palette.weights.slice(0, i + 1).reduce((a, v) => a + v, 0)) : null;
+  const pickColor = () => {
+    if (!palette) return 0;
+    if (!weights) return (Math.random() * palette.colors.length) | 0;
+    const r = Math.random() * weights[weights.length - 1];
+    return weights.findIndex((w) => r <= w);
+  };
+  const pts = data.points.map(([x, y, b]) => ({ x, y, b, ph: Math.random() * 6.28, ci: pickColor() }));
+  const colorSprites = palette ? palette.colors.map((c) => sprite(c)) : null;
   const order = pts.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
 
   let mood = "neutral", talking = false, cur = MOODS.neutral, mature = false;
-  let baseCol = MOODS.neutral.base.slice(), hotCol = MOODS.neutral.hot.slice();
+  let baseCol = MOODS.neutral.base.slice(), hotCol = (palette ? [255, 244, 210] : MOODS.neutral.hot.slice());
   let baseSprite = sprite(baseCol), hotSprite = sprite(hotCol);
   let growth = 1, time = 0, dim = 1;
   const sparks = [];
@@ -66,12 +77,13 @@ export function createPortrait(canvas, data, { seed = 7 } = {}) {
 
   const tick = (step) => {
     time += step;
-    // colours ease toward the mood (or gold when mature)
-    const wantBase = mature ? MATURE : cur.base, wantHot = mature ? [255, 240, 180] : cur.hot;
     const k = 1 - Math.exp(-step * 3);
-    const nb = lerp(baseCol, wantBase, k), nh = lerp(hotCol, wantHot, k);
-    if (nb.some((v, i) => Math.abs(v - baseCol[i]) > 1) ) { baseCol = nb; baseSprite = sprite(baseCol); }
-    if (nh.some((v, i) => Math.abs(v - hotCol[i]) > 1) ) { hotCol = nh; hotSprite = sprite(hotCol); }
+    if (!palette) {                               // no fixed palette: ease colours toward the mood (or gold when mature)
+      const wantBase = mature ? MATURE : cur.base, wantHot = mature ? [255, 240, 180] : cur.hot;
+      const nb = lerp(baseCol, wantBase, k), nh = lerp(hotCol, wantHot, k);
+      if (nb.some((v, i) => Math.abs(v - baseCol[i]) > 1)) { baseCol = nb; baseSprite = sprite(baseCol); }
+      if (nh.some((v, i) => Math.abs(v - hotCol[i]) > 1)) { hotCol = nh; hotSprite = sprite(hotCol); }
+    }
     dim += (((mood === "sleeping") ? 0.5 : 1) - dim) * k;
     // sparks
     const rate = reduced ? 0 : (talking ? cur.rate * 2 : cur.rate);
@@ -92,9 +104,10 @@ export function createPortrait(canvas, data, { seed = 7 } = {}) {
     for (let k = 0; k < n; k++) {
       const p = pts[order[k]];
       const t = 0.8 + tw * Math.sin(time * 2.2 + p.ph);
-      const sz = (2.4 + 3.6 * p.b) * t * breathe;
-      const useHot = ((p.ph * 97) % 1) < 0.18;                 // a few points carry the hot colour
-      const img = useHot ? hotSprite : baseSprite;
+      const sz = (1.7 + 2.7 * p.b) * t * breathe;
+      const twinklePeak = t > (0.8 + tw * 0.6);
+      const img = palette ? (twinklePeak ? hotSprite : colorSprites[p.ci])
+                          : (((p.ph * 97) % 1) < 0.18 ? hotSprite : baseSprite);
       const a = Math.min(1, (0.35 + 0.6 * p.b) * t * dim);
       ctx.globalAlpha = a;
       const x = ox + p.x * scale, y = oy + p.y * scale * aspect;
