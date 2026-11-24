@@ -7,9 +7,18 @@
   &nbsp;·&nbsp; one installer, no admin rights &nbsp;·&nbsp; ~12 MB
 </p>
 
-Eve runs entirely on your own machine. After the first start it works offline: no account, no cloud, no API bill.
-Next to the chat sits a brain made of light that thinks and talks with her, grows as she learns about you,
-and sleeps at night while she sorts the day's memories.
+Eve is a private AI **companion** that lives entirely on your own computer. After the first start it works fully
+offline: no account, no cloud, no API bill. She is built to be with you — as Eve, or as a friend, a brother, a
+mother, or a mentor — grounded in a careful, plain-language understanding of how people work. Next to the chat
+sits a brain made of light that thinks and talks with her, grows as she learns about you, and sleeps at night
+while she sorts the day's memories.
+
+> **An experiment, and private by design.** Eve is an experimental project, shared for people to try. Everything
+> you say stays on your device: no account, no telemetry, no analytics, nothing sent to a server or to us. Eve
+> does not track what you use her for and collects nothing about you. What she remembers is a plain file on your
+> computer that you can read and delete, line by line. She is a companion — not a replacement for the people in
+> your life, and not a doctor or a therapist. In a hard moment she gently points you toward someone you trust or
+> emergency help, and she will never help anyone harm themselves.
 
 <table>
 <tr>
@@ -26,7 +35,8 @@ and sleeps at night while she sorts the day's memories.
 - **Makes a shareable morning card.** After a night of learning, Eve makes an image you can share. Nothing it learned about you appears on the image unless you tick it.
 - **Its own window.** Eve opens as its own app window (not a browser tab), with its own icon.
 - **Speaks Arabic and English.** The interface switches with one button.
-- **Has characters with rights.** You can make your own character, which is a name and a way of talking. Every character card must say who holds its rights.
+- **Is a companion, in the role you choose.** Eve, or a **friend**, **brother**, **mother** or **mentor** — all built on the same grounded understanding of people: listen before fixing, be honest instead of flattering, never build dependence, and always send you back toward the real people in your life. In a crisis she steers you toward a trusted person or emergency help and never gives harmful details.
+- **Has characters with rights.** You can also make your own character — a name and a way of talking — or pick a ready-made one like Alexander the Great. Every character card must say who holds its rights.
 
 </td>
 </tr>
@@ -118,7 +128,7 @@ This is an early version.
 | Vision model (See images) | Wired: switches to Qwen2.5-VL and sends the picture to the model. The engine path is tested, but the VL model download itself is newer and lightly tested |
 | Its own window | Opens via Edge/Chrome in app-mode (no tabs or address bar). Falls back to a browser tab if neither is installed |
 | Nightly LoRA training | Exists in the research engine (Python), not yet connected to llama.cpp |
-| Windows installer | Built and tested on every change on a Windows machine (GitHub Actions, no GPU): it installs, downloads the engine and Qwen3.5 4B, chats in English and Arabic, answers from a file, runs a night, quits and uninstalls. See `windows-test-report.md` in the [nightly release](https://github.com/basillt/eve/releases/tag/nightly) |
+| Windows installer | Built and tested on every change on a Windows machine (GitHub Actions, no GPU): it installs, downloads the engine and Qwen3.5 4B, chats in English and Arabic, **checks that it meets someone in crisis with care and steers them toward help without ever giving harmful detail**, answers from a file, runs a night, quits and uninstalls. See `windows-test-report.md` in the [nightly release](https://github.com/basillt/eve/releases/tag/nightly) |
 
 ## How it works
 
@@ -132,7 +142,7 @@ This is an early version.
 | `pcore/reflect.py` | Nightly learning on any machine: reads the day's chats and saves what matters |
 | `pcore/docs.py` | Reads files (PDF, Word, text) and the text in images (OCR), cuts them into pieces, prepares Arabic-aware search |
 | `pcore/db.py` | One SQLite file with your chats, corrections, memories and files, independent of the model |
-| `pcore/persona.py` | Character cards. A card without `rights` is refused |
+| `pcore/persona.py` | Companion roles and character cards: the shared support foundation (`FOUNDATION`), and the rule that a card without `rights` is refused |
 | `pcore/server.py` | Local OpenAI-compatible server plus the app API |
 | `web/index.html` | The app: chat, brain, memory, files, characters, settings, morning card |
 | `web/brain.js` | The brain: ~2600 neurons, sparks, moods and growth (three.js, bundled in `web/vendor/`) |
@@ -160,25 +170,24 @@ client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="local")
 print(client.chat.completions.create(model="local", messages=[{"role": "user", "content": "Hello"}]).choices[0].message.content)
 ```
 
-### Characters
-In the Characters tab, press "Create a new character" and give it a name, a short description, and a personality and way of talking. Characters made in the app are saved as the user's original work.
+### Companions and characters
+Eve can take the **role** you need. Under every supportive role sits one shared foundation — plain instructions, in `pcore/persona.py` (`FOUNDATION`), on how to be with someone: listen before fixing, validate the feeling and not every belief, ask one open question at a time, reframe harsh thoughts gently, stay honest instead of flattering, never build dependence, and keep you tied to the real people around you. In a hard moment the role steers you toward a trusted person or emergency help and never gives harmful detail — and never any phone numbers, since the app is offline and numbers go stale.
 
-**Ready-made characters** ship with Eve in `personas/` and appear in the Characters tab for anyone to pick:
-- **Eve** — the default assistant that learns with you every night (`eve.json`).
-- **Alexander the Great** — a bold leader-and-strategist voice; a public-domain historical figure (`alexander.json`).
+**Roles** ship with Eve in `personas/` and appear in the app for anyone to pick:
+- **Eve** — your default companion, who listens and remembers you (`eve.json`).
+- **Friend** — an equal, no judgment, honest and warm (`friend.json`).
+- **Brother** — close, protective, tells you the truth (`brother.json`).
+- **Mother** — tender, reassuring, patient (`mother.json`).
+- **Mentor** — calm, asks the right question, challenges you gently (`mentor.json`).
 
-More will be added over time. Every ready-made character carries a `rights` block, so the rule "no character without rights" holds for the pack too — historical figures are `public_domain`.
+A role carries `"support": true`, so it is built on the foundation above. A plain **character** is not — it keeps only its own voice. One ships as an example:
+- **Alexander the Great** — a bold leader-and-strategist voice for learning and inspiration; a public-domain historical figure (`alexander.json`).
 
-A character can bring **its own face** instead of the brain: a card with `"face": "alexander"` shows `web/faces/alexander.json` — the portrait rebuilt as a mosaic of glowing, multi-coloured light-dots that reacts to mood, in the same light aesthetic as the brain. Build one from a reference image with `tools/make_face.py <image> <id>`.
-
-You can also drop your own JSON file in `personas/` (see `eve.json`). It must include:
+Make your own in the app (Create a character — a name and a way of talking, saved as your original work), or drop a JSON file in `personas/` (see `eve.json`). Every card must declare its rights:
 ```json
 "rights": {"type": "original", "holder": "Your name"}
 ```
-The types are:
-- `original`: you made it.
-- `licensed`: you have written permission. Say where it is in `license`.
-- `public_domain`
+The types are `original` (you made it), `licensed` (you have written permission — say where in `license`), and `public_domain`.
 
 ### Launch video
 `tools/promo.html` and `tools/promo_capture.py` render a 15-second vertical video at 1080×1920 and 30 fps, in Arabic or English. In it the brain grows from day 1 to day 60, thinks, answers from a file, and ends on the logo. Every frame is drawn by `brain.js`, so the output is the same every time. The banner at the top of this page is `tools/banner.html`.
