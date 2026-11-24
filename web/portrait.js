@@ -114,43 +114,64 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
 
   const aspect = data.aspect || 1.0;                 // h / w of the face crop
   const raw = data.points || [];
-  const n = raw.length;
+  const palette = (data.palette || [[255, 245, 215]]);
+  let sd = seed >>> 0;
+  const rnd = () => ((sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296);
 
-  // ---- lift the 2-D mosaic into a 3-D relief --------------------------------
-  // plane: centre the face, keep its proportions (wider or taller as the crop is)
+  // ---- build a solid 3-D head: a face on the front, a skull dome at the back -
+  // The front carries the portrait (features + colour); the back is a dim golden
+  // shell. Together they give the head real body, so you see its thickness when
+  // it turns, instead of a flat relief.
   const HWx = 1.0, HWy = HWx * aspect;
-  let mb = 0; for (const p of raw) mb += (p[3] ?? 1); mb = n ? mb / n : 0.66;   // mean brightness
-  const DOME = 0.62, RELIEF = 0.42;
+  const DEPTH = 0.85, RELIEF = 0.26;                 // half-depth front & back, surface relief
+  let mb = 0; for (const p of raw) mb += (p[3] ?? 1); mb = raw.length ? mb / raw.length : 0.66;
+
+  const P = [];                                      // {x,y,z, r,g,b, bright}
+  for (const p of raw) {
+    const nx = (p[0] - 0.5), ny = (p[1] - 0.5);
+    const x = nx * 2 * HWx, y = -ny * 2 * HWy;
+    const ex = x / HWx, ey = y / HWy;
+    const rr = Math.min(1, ex * ex + ey * ey);
+    const dome = Math.sqrt(Math.max(0, 1 - rr));     // ellipsoid cross-section
+    const b = p[3] ?? 1;
+    const c = palette[p[2] | 0] || palette[0];
+    // front: the face
+    P.push({ x, y, z: DEPTH * dome + (b - mb) * RELIEF, r: c[0] / 255, g: c[1] / 255, bb: c[2] / 255, bright: b });
+    // back: the skull — same silhouette, pushed behind, dim and warm
+    P.push({ x, y, z: -DEPTH * 0.92 * dome, r: c[0] / 255 * 0.5, g: c[1] / 255 * 0.42, bb: c[2] / 255 * 0.3, bright: 0.34 });
+  }
+  const nShell = P.length;                            // front + back shells get wired into the mesh
+  // a little dim fill between the shells, so the head reads solid (not two hollow skins) when it turns
+  for (const p of raw) {
+    if (rnd() > 0.4) continue;
+    const nx = (p[0] - 0.5), ny = (p[1] - 0.5);
+    const x = nx * 2 * HWx, y = -ny * 2 * HWy;
+    const ex = x / HWx, ey = y / HWy;
+    const rr = Math.min(1, ex * ex + ey * ey);
+    const dome = Math.sqrt(Math.max(0, 1 - rr));
+    const zf = -DEPTH * 0.9 * dome, zb = DEPTH * 0.9 * dome;
+    const z = zf + (zb - zf) * rnd();                // somewhere inside the body
+    const c = palette[p[2] | 0] || palette[0];
+    P.push({ x, y, z, r: c[0] / 255 * 0.42, g: c[1] / 255 * 0.34, bb: c[2] / 255 * 0.24, bright: 0.26 });
+  }
+  const n = P.length;
 
   const pos = new Float32Array(n * 3);
   const col = new Float32Array(n * 3);
   const bright = new Float32Array(n);
   const seeds = new Float32Array(n);
   const act = new Float32Array(n);
-  const palette = (data.palette || [[255, 245, 215]]);
-  let sd = seed >>> 0;
-  const rnd = () => ((sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296);
-
   for (let i = 0; i < n; i++) {
-    const p = raw[i];
-    const nx = (p[0] - 0.5), ny = (p[1] - 0.5);
-    const x = nx * 2 * HWx;
-    const y = -ny * 2 * HWy;
-    const ex = x / HWx, ey = y / HWy;                // ~ -1..1 across the face
-    const rr = Math.min(1, ex * ex + ey * ey);
-    const dome = Math.sqrt(Math.max(0, 1 - 0.82 * rr));
-    const b = p[3] ?? 1;
-    const z = dome * DOME + (b - mb) * RELIEF;
-    pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
-    const c = palette[p[2] | 0] || palette[0];
-    col[i * 3] = c[0] / 255; col[i * 3 + 1] = c[1] / 255; col[i * 3 + 2] = c[2] / 255;
-    bright[i] = b; seeds[i] = rnd();
+    const q = P[i];
+    pos[i * 3] = q.x; pos[i * 3 + 1] = q.y; pos[i * 3 + 2] = q.z;
+    col[i * 3] = q.r; col[i * 3 + 1] = q.g; col[i * 3 + 2] = q.bb;
+    bright[i] = q.bright; seeds[i] = rnd();
   }
 
-  // ---- wire the points to their nearest neighbours (a constellation) --------
+  // ---- wire the shell points to their nearest neighbours (a constellation) --
   const pts3 = []; for (let i = 0; i < n; i++) pts3.push([pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]);
   const cellW = 2 * HWx / ((data.grid && data.grid[0]) || 90);
-  const { edges: rawEdges, adj } = wire(pts3, 6, (cellW * 1.9) * (cellW * 1.9));
+  const { edges: rawEdges, adj } = wire(pts3.slice(0, nShell), 6, (cellW * 2.4) * (cellW * 2.4));
   // order the points (even sample) so growth can reveal a prefix; sort wires by their newest end
   const order = Array.from({ length: n }, (_, i) => i);
   for (let i = n - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
@@ -216,7 +237,7 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
   const spawn = (hops) => {
     if (sparks.length >= MAX) return;
     let a = -1;
-    for (let t = 0; t < 30; t++) { const i = order[(rnd() * alive_n) | 0]; if (adj[i].length) { a = i; break; } }
+    for (let t = 0; t < 30; t++) { const i = order[(rnd() * alive_n) | 0]; if (adj[i] && adj[i].length) { a = i; break; } }
     if (a < 0) return;
     const nb = liveNb(a); if (!nb.length) return;
     const b = nb[(rnd() * nb.length) | 0];
@@ -253,8 +274,8 @@ export function createPortrait(canvas, data, { seed = 7, autoplay = true } = {})
 
   let drag = null, userYaw = 0, userPitch = 0;
   const down = (e) => { drag = { x: e.clientX, y: e.clientY, yaw: userYaw, pitch: userPitch }; canvas.setPointerCapture?.(e.pointerId); };
-  const move = (e) => { if (!drag) return;                 // a frontal relief: keep it off the edge-on sliver
-    userYaw = Math.max(-0.75, Math.min(0.75, drag.yaw + (e.clientX - drag.x) * 0.009));
+  const move = (e) => { if (!drag) return;                 // turn enough to show the head's body, not so far it reveals the hollow side
+    userYaw = Math.max(-1.0, Math.min(1.0, drag.yaw + (e.clientX - drag.x) * 0.009));
     userPitch = Math.max(-0.5, Math.min(0.5, drag.pitch + (e.clientY - drag.y) * 0.006)); };
   const up = () => { drag = null; };
   canvas.addEventListener("pointerdown", down); canvas.addEventListener("pointermove", move);
