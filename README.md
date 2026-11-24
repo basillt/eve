@@ -163,7 +163,13 @@ print(client.chat.completions.create(model="local", messages=[{"role": "user", "
 ### Characters
 In the Characters tab, press "Create a new character" and give it a name, a short description, and a personality and way of talking. Characters made in the app are saved as the user's original work.
 
-You can also drop a JSON file in `personas/` (see `eve.json`). It must include:
+**Ready-made characters** ship with Eve in `personas/` and appear in the Characters tab for anyone to pick:
+- **Eve** — the default assistant that learns with you every night (`eve.json`).
+- **Alexander the Great** — a bold leader-and-strategist voice; a public-domain historical figure (`alexander.json`).
+
+More will be added over time. Every ready-made character carries a `rights` block, so the rule "no character without rights" holds for the pack too — historical figures are `public_domain`.
+
+You can also drop your own JSON file in `personas/` (see `eve.json`). It must include:
 ```json
 "rights": {"type": "original", "holder": "Your name"}
 ```

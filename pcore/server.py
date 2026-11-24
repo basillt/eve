@@ -209,7 +209,7 @@ def create_app(backend, db, personas_dir, default_max_tokens=512, night_override
         cards, _ = personas()
         if not cards:
             raise HTTPException(500, "no usable persona cards (check the rights block)")
-        return cards.get(db.get("persona")) or next(iter(cards.values()))
+        return cards.get(db.get("persona")) or cards.get("eve") or next(iter(cards.values()))
 
     def image_parts(attached, limit=3):
         """Attached images as data URIs for a vision model, newest-first, a few at most."""
